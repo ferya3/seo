@@ -4,5 +4,8 @@ beautifulsoup4>=4.12
 lxml>=5.0
 flask>=3.0
 
+# اجرای روی سرور (deploy/install.sh خودش نصبش می‌کند)
+gunicorn>=21.2
+
 # اختیاری — فقط برای لایه‌ی پیشنهادهای هوش مصنوعی
 # pip install anthropic

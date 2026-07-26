@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from seoagent.web.app import create_app, store
+from seoagent.web.app import create_app, get_store
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def client():
 def wait_for(job_id: str, timeout: float = 45.0) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        job = store.get(job_id)
+        job = get_store().get(job_id)
         assert job is not None
         if job.status in ("done", "error"):
             return job.to_dict()
@@ -209,3 +209,88 @@ def test_job_failure_is_captured_not_raised():
         time.sleep(0.05)
     assert job.status == "error"
     assert "kaboom" in (job.error or "")
+
+
+# ----------------------------------------------------------- job persistence
+
+
+def test_finished_reports_survive_a_restart(tmp_path):
+    """A server restarts on every deploy and reboot; losing every report each
+    time would make the dashboard useless for anything but one sitting."""
+    from seoagent.web.jobs import JobStore
+
+    first = JobStore(storage_dir=tmp_path)
+    job = first.create("audit", "https://example.com")
+    first.run(job, lambda _j: {"overall_score": 77, "issues": []})
+    for _ in range(60):
+        if job.status == "done":
+            break
+        time.sleep(0.05)
+    assert job.status == "done"
+
+    # A brand-new store, as if the process had been restarted.
+    second = JobStore(storage_dir=tmp_path)
+    restored = second.get(job.id)
+    assert restored is not None
+    assert restored.status == "done"
+    assert restored.result == {"overall_score": 77, "issues": []}
+    assert restored.label == "https://example.com"
+
+
+def test_failed_jobs_are_not_persisted(tmp_path):
+    from seoagent.web.jobs import JobStore
+
+    store_ = JobStore(storage_dir=tmp_path)
+    job = store_.create("audit", "boom")
+
+    def explode(_job):
+        raise RuntimeError("nope")
+
+    store_.run(job, explode)
+    for _ in range(60):
+        if job.status == "error":
+            break
+        time.sleep(0.05)
+
+    assert list(tmp_path.glob("*.json")) == []
+    assert JobStore(storage_dir=tmp_path).get(job.id) is None
+
+
+def test_eviction_removes_the_file_too(tmp_path):
+    from seoagent.web.jobs import JobStore
+
+    small = JobStore(max_jobs=2, storage_dir=tmp_path)
+    jobs = []
+    for i in range(3):
+        job = small.create("audit", f"site-{i}")
+        small.run(job, lambda _j, n=i: {"n": n})
+        jobs.append(job)
+    for job in jobs:
+        for _ in range(60):
+            if job.status in ("done", "error"):
+                break
+            time.sleep(0.05)
+
+    assert small.get(jobs[0].id) is None
+    assert not (tmp_path / f"{jobs[0].id}.json").exists()
+
+
+def test_unwritable_storage_degrades_to_memory_only(tmp_path):
+    """An unwritable data dir must not stop the dashboard from starting."""
+    from seoagent.web.jobs import JobStore
+
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("i am a file", encoding="utf-8")
+
+    store_ = JobStore(storage_dir=blocker)
+    assert store_.storage_dir is None
+    job = store_.create("audit", "still works")
+    assert store_.get(job.id) is job
+
+
+def test_corrupt_report_file_is_skipped(tmp_path):
+    from seoagent.web.jobs import JobStore
+
+    (tmp_path / "broken.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "empty.json").write_text("{}", encoding="utf-8")
+    assert JobStore(storage_dir=tmp_path).recent() == []

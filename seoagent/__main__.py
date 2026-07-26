@@ -15,11 +15,16 @@ from threading import Timer
 
 
 def _serve(args: argparse.Namespace) -> int:
-    from .web import create_app
+    from .web import auth, create_app
+
+    # Refuses to start an unauthenticated dashboard on a public interface.
+    auth.require_auth_or_loopback(args.host)
 
     app = create_app()
     url = f"http://{args.host}:{args.port}"
     print(f"\n  ایجنت سئو روی {url} بالا آمد")
+    if auth.is_enabled():
+        print(f"  احرازهویت فعال است (کاربر: {auth.configured_username()})")
     print("  برای خاموش کردن Ctrl+C را بزن\n")
     if args.open:
         Timer(1.2, lambda: webbrowser.open(url)).start()

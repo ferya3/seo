@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import http.server
+import os
 import shutil
 import socket
 import socketserver
@@ -13,6 +14,27 @@ from pathlib import Path
 import pytest
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture(autouse=True, scope="session")
+def allow_local_fixture_sites():
+    """The fixture sites live on 127.0.0.1, which the SSRF guard blocks by
+    default. Opt in for the whole suite; `test_security.py` unsets it again to
+    exercise the guard itself."""
+    os.environ["SEO_AGENT_ALLOW_PRIVATE"] = "1"
+    yield
+    os.environ.pop("SEO_AGENT_ALLOW_PRIVATE", None)
+
+
+@pytest.fixture(autouse=True)
+def isolated_job_storage(tmp_path, monkeypatch):
+    """Keep tests from reading or writing the developer's real report data."""
+    from seoagent.web import app as web_app
+
+    monkeypatch.setenv("SEO_AGENT_DATA_DIR", str(tmp_path / "data"))
+    web_app.reset_store()
+    yield
+    web_app.reset_store()
 
 
 class _QuietHandler(http.server.SimpleHTTPRequestHandler):

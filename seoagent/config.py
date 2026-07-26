@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
 # Google has indexed with the smartphone Googlebot only since July 2024, so the
 # mobile rendering of a page is the one that matters. We crawl as a mobile
@@ -73,3 +74,15 @@ def anthropic_api_key() -> str | None:
 
 def psi_api_key() -> str | None:
     return os.environ.get("PAGESPEED_API_KEY") or os.environ.get("PSI_API_KEY") or None
+
+
+def data_dir() -> Path:
+    """Where finished reports are stored so they survive a restart.
+
+    Defaults to ./data next to the project, which is what the systemd unit
+    points at with a dedicated StateDirectory.
+    """
+    configured = os.environ.get("SEO_AGENT_DATA_DIR")
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parent.parent / "data"

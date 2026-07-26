@@ -12,6 +12,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
 
+from . import netguard
 from .config import CrawlConfig
 from .models import PageData
 
@@ -171,8 +172,17 @@ class Fetcher:
     # ----------------------------------------------------------------- fetch
 
     def fetch(self, url: str, method: str = "GET") -> FetchResult:
-        self._throttle()
         started = time.monotonic()
+
+        # Checked here rather than only on the submitted URL: a crawl follows
+        # links and redirects, so an external page can steer us at the private
+        # network unless every single request goes through the guard.
+        try:
+            netguard.check_url(url)
+        except netguard.TargetNotAllowed as exc:
+            return self._error(url, started, str(exc))
+
+        self._throttle()
         try:
             resp = self.session.request(
                 method,

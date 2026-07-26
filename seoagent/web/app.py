@@ -6,23 +6,54 @@ import json
 from typing import Any
 
 from flask import Flask, Response, jsonify, render_template, request
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .. import ai
-from ..config import CrawlConfig, KeywordConfig, psi_api_key
+from .. import ai, netguard
+from ..config import CrawlConfig, KeywordConfig, data_dir, psi_api_key
 from ..crawler import Crawler
 from ..export import audit_markdown, keywords_markdown
 from ..fetcher import normalize_url
 from ..keywords.research import research
 from ..report import build_report
 from ..rules import run_all
+from . import auth
 from .jobs import Job, JobStore
 
-store = JobStore()
+_store: JobStore | None = None
+
+
+def get_store() -> JobStore:
+    """The job registry, created on first use.
+
+    Lazy rather than built at import time so SEO_AGENT_DATA_DIR is read when
+    the app starts, not when the module happens to be imported — which is what
+    lets tests point it somewhere disposable.
+    """
+    global _store
+    if _store is None:
+        _store = JobStore(storage_dir=data_dir())
+    return _store
+
+
+def reset_store() -> None:
+    """Drop the registry so the next call rebuilds it from current config."""
+    global _store
+    _store = None
 
 
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config["JSON_AS_ASCII"] = False
+
+    # Behind nginx, honour X-Forwarded-* so redirects and logged client IPs are
+    # the real ones rather than 127.0.0.1.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+    auth.install(app)
+
+    @app.get("/healthz")
+    def healthz():
+        """Unauthenticated so systemd and nginx can probe it."""
+        return {"status": "ok", "jobs": len(get_store().recent(100))}
 
     # ----------------------------------------------------------------- pages
 
@@ -31,12 +62,12 @@ def create_app() -> Flask:
         return render_template(
             "index.html",
             ai_enabled=ai.is_available(),
-            jobs=[j.to_dict() for j in store.recent()],
+            jobs=[j.to_dict() for j in get_store().recent()],
         )
 
     @app.route("/report/<job_id>")
     def report_page(job_id: str):
-        job = store.get(job_id)
+        job = get_store().get(job_id)
         if job is None:
             return render_template("missing.html", job_id=job_id), 404
         if job.status != "done":
@@ -60,6 +91,13 @@ def create_app() -> Flask:
         except Exception:
             return jsonify({"error": "آدرس واردشده معتبر نیست."}), 400
 
+        # Fail fast with a readable reason. The fetcher re-checks every request
+        # during the crawl, so this is a better error message, not the control.
+        try:
+            netguard.check_url(url)
+        except netguard.TargetNotAllowed as exc:
+            return jsonify({"error": str(exc)}), 400
+
         keywords = [k.strip() for k in (payload.get("keywords") or "").split(",") if k.strip()]
         config = CrawlConfig(
             start_url=url,
@@ -75,8 +113,8 @@ def create_app() -> Flask:
         )
         use_ai = bool(payload.get("use_ai", False)) and ai.is_available()
 
-        job = store.create("audit", url)
-        store.run(job, lambda j: _run_audit(j, config, use_ai))
+        job = get_store().create("audit", url)
+        get_store().run(job, lambda j: _run_audit(j, config, use_ai))
         return jsonify(job.to_dict()), 202
 
     @app.post("/api/keywords")
@@ -98,20 +136,20 @@ def create_app() -> Flask:
         )
         use_ai = bool(payload.get("use_ai", False)) and ai.is_available()
 
-        job = store.create("keywords", seed)
-        store.run(job, lambda j: _run_keywords(j, config, use_ai))
+        job = get_store().create("keywords", seed)
+        get_store().run(job, lambda j: _run_keywords(j, config, use_ai))
         return jsonify(job.to_dict()), 202
 
     @app.get("/api/job/<job_id>")
     def job_status(job_id: str):
-        job = store.get(job_id)
+        job = get_store().get(job_id)
         if job is None:
             return jsonify({"error": "چنین کاری پیدا نشد."}), 404
         return jsonify(job.to_dict())
 
     @app.get("/api/job/<job_id>/result")
     def job_result(job_id: str):
-        job = store.get(job_id)
+        job = get_store().get(job_id)
         if job is None:
             return jsonify({"error": "چنین کاری پیدا نشد."}), 404
         if job.status != "done":
@@ -123,7 +161,7 @@ def create_app() -> Flask:
 
     @app.get("/api/job/<job_id>/export.md")
     def job_markdown(job_id: str):
-        job = store.get(job_id)
+        job = get_store().get(job_id)
         if job is None or job.status != "done" or job.result is None:
             return jsonify({"error": "گزارش آماده نیست."}), 404
         text = audit_markdown(job.result) if job.kind == "audit" else keywords_markdown(job.result)
@@ -135,7 +173,7 @@ def create_app() -> Flask:
 
     @app.get("/api/jobs")
     def list_jobs():
-        return jsonify([j.to_dict() for j in store.recent()])
+        return jsonify([j.to_dict() for j in get_store().recent()])
 
     return app
 
