@@ -5,3 +5,6 @@ __pycache__/
 reports/
 *.egg-info/
 data/
+vendor/
+node_modules/
+.env

@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=notify
 User=@APP_USER@
 Group=@APP_USER@
-WorkingDirectory=@APP_DIR@
+WorkingDirectory=@APP_DIR@/services/engine
 EnvironmentFile=@ENV_FILE@
 
 # One worker on purpose: jobs run in background threads and their progress

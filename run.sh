@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # راه‌اندازی ایجنت سئو: محیط مجازی می‌سازد، وابستگی‌ها را نصب می‌کند و داشبورد را بالا می‌آورد.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/services/engine"
 
 if [ ! -d .venv ]; then
   echo "ساخت محیط مجازی…"

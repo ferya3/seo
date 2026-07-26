@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/crawl.completed.json",
+  "title": "crawl.completed",
+  "description": "A crawl finished. Carries the summary only — the full page set and issue list live behind the crawl service's API, because an event large enough to hold them would blow past broker frame limits.",
+  "type": "object",
+  "required": ["crawl_id", "start_url", "status", "overall_score", "stats"],
+  "additionalProperties": false,
+  "properties": {
+    "crawl_id": {"type": "string", "format": "uuid"},
+    "start_url": {"type": "string", "format": "uri"},
+    "status": {"enum": ["completed", "failed"]},
+    "error": {"type": ["string", "null"]},
+    "overall_score": {"type": "integer", "minimum": 0, "maximum": 100},
+    "grade": {"type": "string"},
+    "stats": {
+      "type": "object",
+      "required": ["pages_crawled", "indexable_pages", "total_issues"],
+      "properties": {
+        "pages_crawled": {"type": "integer"},
+        "indexable_pages": {"type": "integer"},
+        "errors": {"type": "integer"},
+        "redirects": {"type": "integer"},
+        "avg_words": {"type": "integer"},
+        "avg_load_ms": {"type": "integer"},
+        "total_issues": {"type": "integer"},
+        "critical_count": {"type": "integer"},
+        "high_count": {"type": "integer"}
+      }
+    },
+    "category_scores": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["category", "score"],
+        "properties": {
+          "category": {"type": "string"},
+          "score": {"type": "integer", "minimum": 0, "maximum": 100},
+          "issue_count": {"type": "integer"}
+        }
+      }
+    },
+    "result_url": {
+      "type": "string",
+      "description": "Where the full report can be fetched: GET /v1/crawls/{crawl_id}"
+    }
+  }
+}

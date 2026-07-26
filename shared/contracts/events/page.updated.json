@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/page.updated.json",
+  "title": "page.updated",
+  "description": "A page's content changed. Fans out to the optimizer, internal-link and indexing consumers. Carries the content hash so consumers can skip work when nothing meaningful changed.",
+  "type": "object",
+  "required": ["page_id", "url", "content_hash"],
+  "additionalProperties": false,
+  "properties": {
+    "page_id": {"type": "string", "format": "uuid"},
+    "crawl_id": {"type": ["string", "null"], "format": "uuid"},
+    "url": {"type": "string", "format": "uri"},
+    "title": {"type": ["string", "null"]},
+    "content_hash": {"type": "string", "description": "sha1 of the normalised main text"},
+    "previous_content_hash": {"type": ["string", "null"]},
+    "word_count": {"type": "integer"},
+    "status_code": {"type": "integer"},
+    "indexable": {"type": "boolean"}
+  }
+}

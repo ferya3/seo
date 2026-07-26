@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/crawl.requested.json",
+  "title": "crawl.requested",
+  "description": "A crawl has been asked for. Published by the gateway or the orchestrator; consumed by the crawl service.",
+  "type": "object",
+  "required": ["crawl_id", "start_url"],
+  "additionalProperties": false,
+  "properties": {
+    "crawl_id": {"type": "string", "format": "uuid"},
+    "start_url": {"type": "string", "format": "uri"},
+    "max_pages": {"type": "integer", "minimum": 1, "maximum": 100000, "default": 50},
+    "max_depth": {"type": "integer", "minimum": 1, "maximum": 20, "default": 3},
+    "user_agent": {"enum": ["mobile", "desktop", "googlebot"], "default": "mobile"},
+    "respect_robots": {"type": "boolean", "default": true},
+    "check_external_links": {"type": "boolean", "default": true},
+    "follow_subdomains": {"type": "boolean", "default": false},
+    "target_keywords": {"type": "array", "items": {"type": "string"}, "maxItems": 50}
+  }
+}

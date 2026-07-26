@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/keyword.researched.json",
+  "title": "keyword.researched",
+  "description": "Keyword research finished for a seed term.",
+  "type": "object",
+  "required": ["research_id", "seed", "status", "total"],
+  "additionalProperties": false,
+  "properties": {
+    "research_id": {"type": "string", "format": "uuid"},
+    "seed": {"type": "string"},
+    "lang": {"type": "string"},
+    "country": {"type": "string"},
+    "status": {"enum": ["completed", "failed"]},
+    "error": {"type": ["string", "null"]},
+    "total": {"type": "integer", "minimum": 0},
+    "cluster_count": {"type": "integer", "minimum": 0},
+    "top_keywords": {
+      "type": "array",
+      "maxItems": 25,
+      "description": "A preview so subscribers can act without a second call. The full set is behind GET /v1/keywords/{research_id}.",
+      "items": {
+        "type": "object",
+        "required": ["keyword", "demand", "intent"],
+        "properties": {
+          "keyword": {"type": "string"},
+          "demand": {"type": "integer"},
+          "opportunity": {"type": "integer"},
+          "intent": {"type": "string"}
+        }
+      }
+    },
+    "result_url": {"type": "string"}
+  }
+}

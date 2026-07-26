@@ -1,0 +1,132 @@
+# Local platform. Everything in the "Shared Services" row of the architecture,
+# plus the services that exist today.
+#
+#   docker compose -f infra/docker/docker-compose.yml up -d
+#
+# Ports are published on 127.0.0.1 only — these are development backing
+# services with default credentials and must not be reachable from outside.
+
+name: seo-platform
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: seo
+      POSTGRES_PASSWORD: seo
+      POSTGRES_DB: seo
+    ports: ["127.0.0.1:5432:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Applied in filename order on first boot of an empty volume.
+      - ../db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seo -d seo"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["127.0.0.1:6379:6379"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: seo
+      RABBITMQ_DEFAULT_PASS: seo
+    ports:
+      - "127.0.0.1:5672:5672"     # AMQP
+      - "127.0.0.1:15672:15672"   # management UI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "127.0.0.1:6333:6333"     # REST
+      - "127.0.0.1:6334:6334"     # gRPC
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    environment:
+      MEILI_MASTER_KEY: devkey-change-me
+      MEILI_ENV: development
+    ports: ["127.0.0.1:7700:7700"]
+    volumes:
+      - meili-data:/meili_data
+
+  minio:
+    # Stands in for S3 / Cloudflare R2 locally, same API.
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: seo
+      MINIO_ROOT_PASSWORD: seo-secret
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+
+  # ------------------------------------------------------------- our services
+
+  crawl-api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/crawl.Dockerfile
+    command: ["uvicorn", "services.crawl.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      CRAWL_DATA_DIR: /var/lib/seoagent/crawls
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+    ports: ["127.0.0.1:8001:8000"]
+    volumes:
+      - crawl-data:/var/lib/seoagent/crawls
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  crawl-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/crawl.Dockerfile
+    command: ["python", "-m", "services.crawl.worker"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      CRAWL_DATA_DIR: /var/lib/seoagent/crawls
+    volumes:
+      # Shares the store with the API so a bus-triggered crawl is readable over HTTP.
+      - crawl-data:/var/lib/seoagent/crawls
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: on-failure
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  qdrant-data:
+  meili-data:
+  minio-data:
+  crawl-data:

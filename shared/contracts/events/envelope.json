@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/envelope.json",
+  "title": "Event envelope",
+  "description": "Every message on the bus carries this envelope. Consumers route on `type` and deduplicate on `id`; the payload shape is defined by the schema named in `type`.",
+  "type": "object",
+  "required": ["id", "type", "version", "occurred_at", "producer", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique per event. Delivery is at-least-once, so consumers MUST treat this as an idempotency key."
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$",
+      "description": "Routing key, `<aggregate>.<past_tense_verb>` — e.g. crawl.completed, page.updated.",
+      "examples": ["crawl.requested", "crawl.completed", "page.updated", "keyword.researched"]
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Payload schema version. Bump on any breaking change; publish both versions during a migration window."
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the fact happened, not when it was published. Ordering is not guaranteed by the bus."
+    },
+    "producer": {
+      "type": "string",
+      "description": "Service that emitted it. For debugging and for cycle detection in event chains.",
+      "examples": ["crawl-service", "keyword-service", "orchestrator"]
+    },
+    "correlation_id": {
+      "type": ["string", "null"],
+      "description": "Ties every event caused by one user action together. Propagate it unchanged through the whole chain."
+    },
+    "causation_id": {
+      "type": ["string", "null"],
+      "description": "The id of the event that directly caused this one. Correlation gives you the trace; causation gives you the edges."
+    },
+    "tenant_id": {
+      "type": ["string", "null"],
+      "description": "Owning team/account. Consumers MUST scope every query by it — this is the multi-tenancy boundary."
+    },
+    "project_id": {
+      "type": ["string", "null"],
+      "description": "Owning project (a website under a tenant)."
+    },
+    "payload": {
+      "type": "object",
+      "description": "Shape defined by the matching schema in this directory."
+    }
+  }
+}
