@@ -33,8 +33,9 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("SEO_AGENT_ALLOW_PRIVATE", "1")
 
     from services.crawl import api
+    from services.crawl.store import CrawlStore
 
-    api.store = api.CrawlStore(tmp_path / "crawls")
+    api.store = CrawlStore(tmp_path / "crawls")
     api._publisher = None
     yield api
 

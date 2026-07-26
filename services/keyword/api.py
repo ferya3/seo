@@ -31,13 +31,14 @@ from seoagent.keywords.research import research  # noqa: E402
 
 from shared.contracts import ContractError, validate_event  # noqa: E402
 from shared.events import Envelope, Publisher  # noqa: E402
+from shared.store import PendingEvent  # noqa: E402
 
-from .store import ResearchRecord, ResearchStore  # noqa: E402
+from .store import ResearchRecord, open_store  # noqa: E402
 
 log = logging.getLogger(__name__)
 SERVICE = "keyword-service"
 
-store = ResearchStore(Path(os.environ.get("KEYWORD_DATA_DIR", "/var/lib/seoagent/keywords")))
+store = open_store(Path(os.environ.get("KEYWORD_DATA_DIR", "/var/lib/seoagent/keywords")))
 _publisher: Publisher | None = None
 
 
@@ -98,7 +99,7 @@ def create_research(request: ResearchRequest, background: BackgroundTasks) -> Re
         raise HTTPException(422, "seed must not be blank")
 
     research_id = str(uuid.uuid4())
-    store.create(research_id, seed)
+    store.create(research_id, seed, tenant_id=request.tenant_id, project_id=request.project_id)
     payload = request.model_dump()
     payload["seed"] = seed
     background.add_task(
@@ -142,6 +143,9 @@ def run_research(
 
     Single entry point for the HTTP route and the bus worker.
     """
+    # Read before marking running: a request with no seed must fail here, not
+    # after a status write that would leave the run stuck as "running".
+    seed = request["seed"]
     store.mark_running(research_id)
     envelope_fields = {
         "tenant_id": tenant_id,
@@ -151,7 +155,7 @@ def run_research(
 
     try:
         config = KeywordConfig(
-            seed=request["seed"],
+            seed=seed,
             lang=request.get("lang", "fa"),
             country=request.get("country", "IR"),
             max_keywords=request.get("max_keywords", 200),
@@ -161,26 +165,82 @@ def run_research(
             sources=request.get("sources") or ["google", "youtube", "bing", "duckduckgo"],
         )
         report = research(config).to_dict()
-        record = store.complete(research_id, report)
+        status, error = "completed", None
     except Exception as exc:
         log.exception("research %s failed", research_id)
-        record = store.fail(research_id, f"{type(exc).__name__}: {exc}")
-        _emit_researched(record, causation, envelope_fields)
-        return record
+        report, status, error = {}, "failed", f"{type(exc).__name__}: {exc}"
 
-    _emit_researched(record, causation, envelope_fields)
+    payload = researched_payload(research_id, seed, report, status, error)
+    # Staged inside the same transaction as the status write when the store is
+    # Postgres-backed, so a crash cannot leave a finished run with no event.
+    staged = (
+        PendingEvent(
+            type="keyword.researched",
+            payload=payload,
+            producer=SERVICE,
+            correlation_id=envelope_fields["correlation_id"],
+            causation_id=causation.id if causation is not None else None,
+        ),
+    ) if _publishable("keyword.researched", payload) else ()
+
+    if status == "completed":
+        record = store.complete(research_id, report, events=staged)
+    else:
+        record = store.fail(research_id, error, events=staged)
+
+    # A file-backed store cannot stage anything; it says so, and we publish
+    # directly instead. With Postgres the relay owns this and publishing here
+    # too would double every event.
+    if staged and not store.stages_events:
+        _emit("keyword.researched", payload, causation, envelope_fields)
     return record
+
+
+def researched_payload(
+    research_id: str, seed: str, report: dict[str, Any], status: str, error: str | None
+) -> dict[str, Any]:
+    keywords = report.get("keywords", [])
+    return {
+        "research_id": research_id,
+        "seed": seed,
+        "lang": report.get("lang", ""),
+        "country": report.get("country", ""),
+        "status": status,
+        "error": error,
+        "total": report.get("total", 0),
+        "cluster_count": len(report.get("clusters", [])),
+        # A preview so a subscriber can act without a second call; the full
+        # set stays behind the result_url.
+        "top_keywords": [
+            {
+                "keyword": k["keyword"],
+                "demand": k["demand"],
+                "opportunity": k["opportunity"],
+                "intent": k["intent"],
+            }
+            for k in keywords[:25]
+        ],
+        "result_url": f"/v1/research/{research_id}",
+    }
+
+
+def _publishable(event_type: str, payload: dict[str, Any]) -> bool:
+    """A contract violation is our bug — it must not reach a consumer, and it
+    must not be written to the outbox either, where the relay would publish it
+    later with no idea it was invalid."""
+    try:
+        validate_event(event_type, payload)
+        return True
+    except ContractError:
+        log.exception("refusing to publish invalid %s", event_type)
+        return False
 
 
 def _emit(event_type: str, payload: dict[str, Any], causation: Envelope | None, fields: dict) -> None:
     bus = publisher()
     if bus is None:
         return
-    try:
-        validate_event(event_type, payload)
-    except ContractError:
-        # Our bug, not the caller's — keep it out of every consumer.
-        log.exception("refusing to publish invalid %s", event_type)
+    if not _publishable(event_type, payload):
         return
     try:
         if causation is not None:
@@ -191,35 +251,3 @@ def _emit(event_type: str, payload: dict[str, Any], causation: Envelope | None, 
         # The result is already durable; a broker outage must not rewrite a
         # successful run as failed.
         log.exception("failed to publish %s", event_type)
-
-
-def _emit_researched(record: ResearchRecord, causation: Envelope | None, fields: dict) -> None:
-    report = record.result or {}
-    keywords = report.get("keywords", [])
-    _emit(
-        "keyword.researched",
-        {
-            "research_id": record.job_id,
-            "seed": record.subject,
-            "lang": report.get("lang", ""),
-            "country": report.get("country", ""),
-            "status": "completed" if record.status == "completed" else "failed",
-            "error": record.error,
-            "total": report.get("total", 0),
-            "cluster_count": len(report.get("clusters", [])),
-            # A preview so a subscriber can act without a second call; the full
-            # set stays behind the result_url.
-            "top_keywords": [
-                {
-                    "keyword": k["keyword"],
-                    "demand": k["demand"],
-                    "opportunity": k["opportunity"],
-                    "intent": k["intent"],
-                }
-                for k in keywords[:25]
-            ],
-            "result_url": f"/v1/research/{record.job_id}",
-        },
-        causation,
-        fields,
-    )

@@ -42,8 +42,9 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(source_module, "related_from_wikipedia", lambda *a, **k: [])
 
     from services.keyword import api
+    from services.keyword.store import ResearchStore
 
-    api.store = api.ResearchStore(tmp_path / "keywords")
+    api.store = ResearchStore(tmp_path / "keywords")
     api._publisher = None
     yield api
 
@@ -242,6 +243,57 @@ def test_worker_skips_research_that_already_ran(isolated, monkeypatch):
         )
     )
     assert calls == []
+
+
+def test_worker_carries_tenancy_from_the_envelope(isolated, monkeypatch):
+    """The envelope is the only trustworthy source: the payload is whatever a
+    producer chose to put there, and with Postgres this becomes the column the
+    outbox copies onto every downstream event."""
+    from services.keyword import worker
+
+    monkeypatch.setattr(worker.api, "run_research", lambda rid, payload, **kw: None)
+    worker._seen.clear()
+
+    research_id, tenant, project = (str(uuid.uuid4()) for _ in range(3))
+    worker.handle(
+        Envelope(
+            type="keyword.research_requested",
+            payload={"research_id": research_id, "seed": "کفش"},
+            producer="gateway",
+            tenant_id=tenant,
+            project_id=project,
+        )
+    )
+
+    record = isolated.store.get(research_id)
+    assert record.tenant_id == tenant
+    assert record.project_id == project
+
+
+def test_the_contract_refuses_tenancy_in_the_payload(isolated):
+    """Belt and braces on the above: a producer cannot smuggle a tenant into the
+    payload and hope something downstream prefers it to the envelope."""
+    from services.keyword import worker
+
+    worker._seen.clear()
+    with pytest.raises(ValueError, match="tenant_id"):
+        worker.handle(
+            Envelope(
+                type="keyword.research_requested",
+                payload={"research_id": str(uuid.uuid4()), "seed": "کفش", "tenant_id": "sneaky"},
+                producer="gateway",
+            )
+        )
+
+
+def test_a_request_with_no_seed_never_marks_the_run_running(isolated):
+    """It must fail before the status write. A run left as "running" is one the
+    worker's idempotency check will then refuse to retry, forever."""
+    research_id = str(uuid.uuid4())
+    isolated.store.create(research_id, "کفش")
+    with pytest.raises(KeyError):
+        isolated.run_research(research_id, {"lang": "fa"})
+    assert isolated.store.get(research_id).status == "queued"
 
 
 def test_worker_dead_letters_a_malformed_request(isolated):

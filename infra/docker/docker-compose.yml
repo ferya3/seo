@@ -115,11 +115,14 @@ services:
     environment:
       RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
       CRAWL_DATA_DIR: /var/lib/seoagent/crawls
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
     volumes:
-      # Shares the store with the API so a bus-triggered crawl is readable over HTTP.
+      # Only used if DATABASE_URL is removed: the file store is the fallback,
+      # and it needs the API's directory to stay readable over HTTP.
       - crawl-data:/var/lib/seoagent/crawls
     depends_on:
       rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
     restart: on-failure
 
   keyword-api:
@@ -151,11 +154,28 @@ services:
     environment:
       RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
       KEYWORD_DATA_DIR: /var/lib/seoagent/keywords
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
     volumes:
-      # Shares the store with the API so a bus-triggered run is readable over HTTP.
+      # Only used if DATABASE_URL is removed — see the crawl worker.
       - keyword-data:/var/lib/seoagent/keywords
     depends_on:
       rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    restart: on-failure
+
+  outbox-relay:
+    # The only process that publishes what the services staged. Exactly one
+    # deployment needs it, but running two is safe (FOR UPDATE SKIP LOCKED),
+    # which is what makes a rolling restart of it a non-event.
+    build:
+      context: ../..
+      dockerfile: infra/docker/relay.Dockerfile
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
     restart: on-failure
 
 volumes:

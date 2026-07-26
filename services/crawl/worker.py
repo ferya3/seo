@@ -55,7 +55,15 @@ def handle(envelope: Envelope) -> None:
         return
 
     if existing is None:
-        api.store.create(crawl_id, payload["start_url"])
+        # Tenancy comes from the envelope, not the payload: it is the column the
+        # outbox copies onto the event, so a row created without it loses the
+        # tenant for every downstream consumer.
+        api.store.create(
+            crawl_id,
+            payload["start_url"],
+            tenant_id=envelope.tenant_id,
+            project_id=envelope.project_id,
+        )
 
     api.run_crawl(
         crawl_id,

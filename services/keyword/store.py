@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from shared.db import JobTable, store_for
 from shared.store import FileJobStore, JobRecord
 
 
@@ -39,9 +40,27 @@ class ResearchRecord(JobRecord):
             updated_at=raw.get("updated_at", ""),
             error=raw.get("error"),
             result=raw.get("result") if "result" in raw else raw.get("report"),
+            tenant_id=raw.get("tenant_id"),
+            project_id=raw.get("project_id"),
         )
+
+
+TABLE = JobTable(
+    name="research",
+    subject_column="seed",
+    derived={
+        "total": lambda report: report.get("total"),
+        "lang": lambda report: report.get("lang"),
+        "country": lambda report: report.get("country"),
+    },
+)
 
 
 class ResearchStore(FileJobStore[ResearchRecord]):
     def __init__(self, directory: Path | str):
         super().__init__(directory, ResearchRecord)
+
+
+def open_store(directory: Path | str, dsn: str | None = None):
+    """Postgres when configured, files otherwise. See `shared.db.store_for`."""
+    return store_for(TABLE, ResearchRecord, directory, dsn)

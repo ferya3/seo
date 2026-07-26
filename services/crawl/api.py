@@ -37,13 +37,14 @@ from seoagent.rules import run_all  # noqa: E402
 
 from shared.contracts import ContractError, validate_event  # noqa: E402
 from shared.events import Envelope, Publisher  # noqa: E402
+from shared.store import PendingEvent  # noqa: E402
 
-from .store import CrawlRecord, CrawlStore  # noqa: E402
+from .store import CrawlRecord, open_store  # noqa: E402
 
 log = logging.getLogger(__name__)
 SERVICE = "crawl-service"
 
-store = CrawlStore(Path(os.environ.get("CRAWL_DATA_DIR", "/var/lib/seoagent/crawls")))
+store = open_store(Path(os.environ.get("CRAWL_DATA_DIR", "/var/lib/seoagent/crawls")))
 _publisher: Publisher | None = None
 
 
@@ -112,7 +113,7 @@ def create_crawl(request: CrawlRequest, background: BackgroundTasks) -> CrawlAcc
         raise HTTPException(400, f"invalid url: {exc}") from exc
 
     crawl_id = str(uuid.uuid4())
-    store.create(crawl_id, url)
+    store.create(crawl_id, url, tenant_id=request.tenant_id, project_id=request.project_id)
     payload = request.model_dump()
     payload["start_url"] = url
     background.add_task(
@@ -154,6 +155,9 @@ def run_crawl(
 
     The single entry point for both the HTTP route and the bus worker.
     """
+    # Read before marking running: a request with no start_url must fail here,
+    # not after a status write that would leave the crawl stuck as "running".
+    url = request["start_url"]
     store.mark_running(crawl_id)
     envelope_fields = {
         "tenant_id": tenant_id,
@@ -163,7 +167,7 @@ def run_crawl(
 
     try:
         config = CrawlConfig(
-            start_url=request["start_url"],
+            start_url=url,
             max_pages=request.get("max_pages", 50),
             max_depth=request.get("max_depth", 3),
             user_agent_key=request.get("user_agent", "mobile"),
@@ -174,28 +178,62 @@ def run_crawl(
         )
         ctx = Crawler(config).crawl()
         report = build_report(ctx, run_all(ctx)).to_dict()
-        record = store.complete(crawl_id, report)
+        status, error = "completed", None
     except Exception as exc:
         log.exception("crawl %s failed", crawl_id)
-        record = store.fail(crawl_id, f"{type(exc).__name__}: {exc}")
-        _emit_completed(record, causation, envelope_fields)
-        return record
+        report, status, error = {}, "failed", f"{type(exc).__name__}: {exc}"
 
-    _emit_completed(record, causation, envelope_fields)
-    _emit_page_events(record, causation, envelope_fields)
+    outgoing: list[tuple[str, dict[str, Any]]] = [
+        ("crawl.completed", completed_payload(crawl_id, url, report, status, error))
+    ]
+    if status == "completed":
+        outgoing += [("page.updated", p) for p in page_payloads(crawl_id, report)]
+    outgoing = [(t, p) for t, p in outgoing if _publishable(t, p)]
+
+    # Staged inside the same transaction as the status write when the store is
+    # Postgres-backed, so a crash cannot leave a finished crawl with no events.
+    staged = tuple(
+        PendingEvent(
+            type=event_type,
+            payload=payload,
+            producer=SERVICE,
+            correlation_id=envelope_fields["correlation_id"],
+            causation_id=causation.id if causation is not None else None,
+        )
+        for event_type, payload in outgoing
+    )
+
+    if status == "completed":
+        record = store.complete(crawl_id, report, events=staged)
+    else:
+        record = store.fail(crawl_id, error, events=staged)
+
+    # A file-backed store cannot stage anything; it says so, and we publish
+    # directly instead. With Postgres the relay owns this and publishing here
+    # too would double every event.
+    if not store.stages_events:
+        for event_type, payload in outgoing:
+            _emit(event_type, payload, causation, envelope_fields)
     return record
+
+
+def _publishable(event_type: str, payload: dict[str, Any]) -> bool:
+    """A contract violation is our bug, not the caller's. Refusing to publish
+    keeps the malformed event out of every downstream consumer — and out of the
+    outbox, where the relay would later publish it with no idea it was invalid."""
+    try:
+        validate_event(event_type, payload)
+        return True
+    except ContractError:
+        log.exception("refusing to publish invalid %s", event_type)
+        return False
 
 
 def _emit(event_type: str, payload: dict[str, Any], causation: Envelope | None, fields: dict) -> None:
     bus = publisher()
     if bus is None:
         return
-    try:
-        validate_event(event_type, payload)
-    except ContractError:
-        # A contract violation is our bug, not the caller's. Refusing to publish
-        # keeps the malformed event out of every downstream consumer.
-        log.exception("refusing to publish invalid %s", event_type)
+    if not _publishable(event_type, payload):
         return
     try:
         if causation is not None:
@@ -208,60 +246,51 @@ def _emit(event_type: str, payload: dict[str, Any], causation: Envelope | None, 
         log.exception("failed to publish %s", event_type)
 
 
-def _emit_completed(record: CrawlRecord, causation: Envelope | None, fields: dict) -> None:
-    report = record.report or {}
+def completed_payload(
+    crawl_id: str, start_url: str, report: dict[str, Any], status: str, error: str | None
+) -> dict[str, Any]:
     stats = report.get("stats", {})
-    _emit(
-        "crawl.completed",
-        {
-            "crawl_id": record.crawl_id,
-            "start_url": record.start_url,
-            "status": "completed" if record.status == "completed" else "failed",
-            "error": record.error,
-            "overall_score": report.get("overall_score", 0),
-            "grade": report.get("grade", ""),
-            "stats": {
-                "pages_crawled": stats.get("pages_crawled", 0),
-                "indexable_pages": stats.get("indexable_pages", 0),
-                "errors": stats.get("errors", 0),
-                "redirects": stats.get("redirects", 0),
-                "avg_words": stats.get("avg_words", 0),
-                "avg_load_ms": stats.get("avg_load_ms", 0),
-                "total_issues": stats.get("total_issues", 0),
-                "critical_count": stats.get("critical_count", 0),
-                "high_count": stats.get("high_count", 0),
-            },
-            "category_scores": [
-                {"category": c["category"], "score": c["score"], "issue_count": c["issue_count"]}
-                for c in report.get("category_scores", [])
-            ],
-            "result_url": f"/v1/crawls/{record.crawl_id}",
+    return {
+        "crawl_id": crawl_id,
+        "start_url": start_url,
+        "status": status,
+        "error": error,
+        "overall_score": report.get("overall_score", 0),
+        "grade": report.get("grade", ""),
+        "stats": {
+            "pages_crawled": stats.get("pages_crawled", 0),
+            "indexable_pages": stats.get("indexable_pages", 0),
+            "errors": stats.get("errors", 0),
+            "redirects": stats.get("redirects", 0),
+            "avg_words": stats.get("avg_words", 0),
+            "avg_load_ms": stats.get("avg_load_ms", 0),
+            "total_issues": stats.get("total_issues", 0),
+            "critical_count": stats.get("critical_count", 0),
+            "high_count": stats.get("high_count", 0),
         },
-        causation,
-        fields,
-    )
+        "category_scores": [
+            {"category": c["category"], "score": c["score"], "issue_count": c["issue_count"]}
+            for c in report.get("category_scores", [])
+        ],
+        "result_url": f"/v1/crawls/{crawl_id}",
+    }
 
 
-def _emit_page_events(record: CrawlRecord, causation: Envelope | None, fields: dict) -> None:
+def page_payloads(crawl_id: str, report: dict[str, Any]) -> list[dict[str, Any]]:
     """One page.updated per indexable page, so the optimizer and internal-link
     consumers can react per page rather than re-deriving from the whole report."""
-    report = record.report or {}
-    for page in report.get("pages", []):
-        if not page.get("indexable"):
-            continue
-        _emit(
-            "page.updated",
-            {
-                "page_id": str(uuid.uuid5(uuid.NAMESPACE_URL, page["url"])),
-                "crawl_id": record.crawl_id,
-                "url": page["url"],
-                "title": page.get("title"),
-                "content_hash": page.get("content_hash", ""),
-                "previous_content_hash": None,
-                "word_count": page.get("words", 0),
-                "status_code": page.get("status", 0),
-                "indexable": True,
-            },
-            causation,
-            fields,
-        )
+    return [
+        {
+            "page_id": str(uuid.uuid5(uuid.NAMESPACE_URL, page["url"])),
+            "crawl_id": crawl_id,
+            "url": page["url"],
+            "title": page.get("title"),
+            "content_hash": page.get("content_hash", ""),
+            "previous_content_hash": None,
+            "word_count": page.get("words", 0),
+            "status_code": page.get("status", 0),
+            "indexable": True,
+        }
+        for page in report.get("pages", [])
+        if page.get("indexable")
+    ]
