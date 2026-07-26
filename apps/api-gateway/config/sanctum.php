@@ -37,7 +37,16 @@ return [
     |
     */
 
-    'guard' => ['web'],
+    /*
+     * Empty on purpose: this gateway is token-only.
+     *
+     * The default ['web'] makes Sanctum try the session guard first and fall
+     * back to the bearer token. On an API that is wrong twice: a session
+     * cookie would authenticate API calls (bringing CSRF back with it), and
+     * revoking a token would not actually end a session-backed request — which
+     * is how a logged-out token kept working until this was found.
+     */
+    'guard' => [],
 
     /*
     |--------------------------------------------------------------------------

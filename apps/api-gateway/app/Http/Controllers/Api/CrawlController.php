@@ -20,6 +20,8 @@ use Illuminate\Http\Request;
  */
 final class CrawlController extends Controller
 {
+    use ResolvesProject;
+
     public function __construct(private readonly CrawlServiceClient $crawls)
     {
     }
@@ -42,7 +44,7 @@ final class CrawlController extends Controller
         // trusting a client-supplied tenant_id would let any caller read or
         // write another tenant's data.
         $validated['tenant_id'] = $request->user()?->tenant_id;
-        $validated['project_id'] = $request->input('project_id');
+        $validated['project_id'] = $this->ownedProjectId($request);
         $validated['correlation_id'] = $request->header('X-Correlation-Id');
 
         try {

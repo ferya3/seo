@@ -163,6 +163,29 @@ services:
       postgres: {condition: service_healthy}
     restart: on-failure
 
+  api-gateway:
+    # The only service exposed to the outside in a real deployment; everything
+    # else here is reachable only on the compose network.
+    build:
+      context: ../..
+      dockerfile: infra/docker/gateway.Dockerfile
+    environment:
+      APP_ENV: local
+      APP_KEY: ${APP_KEY:?run php artisan key:generate and export APP_KEY}
+      DB_CONNECTION: pgsql
+      DB_URL: postgresql://seo:seo@postgres:5432/seo
+      CACHE_STORE: redis
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: redis
+      REDIS_HOST: redis
+      CRAWL_SERVICE_URL: http://crawl-api:8000
+      KEYWORD_SERVICE_URL: http://keyword-api:8000
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: on-failure
+
   outbox-relay:
     # The only process that publishes what the services staged. Exactly one
     # deployment needs it, but running two is safe (FOR UPDATE SKIP LOCKED),

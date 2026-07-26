@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\Tenant;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
 
 /**
@@ -19,29 +18,20 @@ use Tests\TestCase;
  */
 final class CrawlApiTest extends TestCase
 {
-    use RefreshDatabase;
-
     private const ACCEPTED = [
         'crawl_id' => '11111111-2222-3333-4444-555555555555',
         'status' => 'queued',
         'result_url' => '/v1/crawls/11111111-2222-3333-4444-555555555555',
     ];
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-        RateLimiter::clear('api');
-        Http::preventStrayRequests();
-    }
 
-    private function user(?string $tenantId = null): User
+    /**
+     * The tenant is a real row now, not a made-up uuid: users.tenant_id has a
+     * foreign key, so an invented tenant no longer inserts.
+     */
+    private function user(?Tenant $tenant = null): User
     {
-        $user = User::factory()->create();
-        if ($tenantId !== null) {
-            $user->forceFill(['tenant_id' => $tenantId])->save();
-        }
-
-        return $user;
+        return User::factory()->inTenant($tenant ?? Tenant::factory()->create())->create();
     }
 
     // ------------------------------------------------------------------ auth
@@ -75,14 +65,14 @@ final class CrawlApiTest extends TestCase
     public function test_tenancy_comes_from_the_authenticated_user(): void
     {
         Http::fake(['*/v1/crawls' => Http::response(self::ACCEPTED, 202)]);
-        $tenant = '99999999-8888-7777-6666-555555555555';
+        $tenant = Tenant::factory()->create();
 
-        $this->actingAs($this->user($tenant))
+        $this->actingAs($this->user($tenant), 'sanctum')
             ->postJson('/api/v1/crawls', ['start_url' => 'https://example.com'])
             ->assertStatus(202)
             ->assertJson(self::ACCEPTED);
 
-        Http::assertSent(fn ($request) => $request['tenant_id'] === $tenant);
+        Http::assertSent(fn ($request) => $request['tenant_id'] === $tenant->id);
     }
 
     public function test_a_tenant_id_in_the_body_is_ignored(): void
@@ -93,24 +83,24 @@ final class CrawlApiTest extends TestCase
          * could read and write another tenant's data by typing their id.
          */
         Http::fake(['*/v1/crawls' => Http::response(self::ACCEPTED, 202)]);
-        $mine = '11111111-1111-1111-1111-111111111111';
+        $mine = Tenant::factory()->create();
         $theirs = '22222222-2222-2222-2222-222222222222';
 
-        $this->actingAs($this->user($mine))
+        $this->actingAs($this->user($mine), 'sanctum')
             ->postJson('/api/v1/crawls', [
                 'start_url' => 'https://example.com',
                 'tenant_id' => $theirs,
             ])
             ->assertStatus(202);
 
-        Http::assertSent(fn ($request) => $request['tenant_id'] === $mine);
+        Http::assertSent(fn ($request) => $request['tenant_id'] === $mine->id);
     }
 
     public function test_a_correlation_id_header_is_forwarded(): void
     {
         Http::fake(['*/v1/crawls' => Http::response(self::ACCEPTED, 202)]);
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->withHeader('X-Correlation-Id', 'trace-abc')
             ->postJson('/api/v1/crawls', ['start_url' => 'https://example.com'])
             ->assertStatus(202);
@@ -144,7 +134,7 @@ final class CrawlApiTest extends TestCase
     {
         Http::fake();
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->postJson('/api/v1/crawls', $body)
             ->assertStatus(422);
 
@@ -164,7 +154,7 @@ final class CrawlApiTest extends TestCase
             ['detail' => 'target 169.254.169.254 is not allowed'], 400
         )]);
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->postJson('/api/v1/crawls', ['start_url' => 'http://169.254.169.254/'])
             ->assertStatus(422)
             ->assertJson(['error' => 'target 169.254.169.254 is not allowed']);
@@ -174,7 +164,7 @@ final class CrawlApiTest extends TestCase
     {
         Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('refused'));
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->postJson('/api/v1/crawls', ['start_url' => 'https://example.com'])
             ->assertStatus(503)
             ->assertJson(['error' => 'crawl service unavailable']);
@@ -184,7 +174,7 @@ final class CrawlApiTest extends TestCase
     {
         Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('refused'));
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->getJson('/api/v1/crawls/'.self::ACCEPTED['crawl_id'])
             ->assertStatus(503);
     }
@@ -193,7 +183,7 @@ final class CrawlApiTest extends TestCase
     {
         Http::fake(['*' => Http::response(['detail' => 'crawl not found'], 404)]);
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->getJson('/api/v1/crawls/'.self::ACCEPTED['crawl_id'])
             ->assertStatus(404)
             ->assertJson(['error' => 'crawl not found']);
@@ -211,7 +201,7 @@ final class CrawlApiTest extends TestCase
         ];
         Http::fake(['*' => Http::response($report, 200)]);
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->getJson('/api/v1/crawls/'.self::ACCEPTED['crawl_id'])
             ->assertOk()
             ->assertJson($report);
@@ -221,7 +211,7 @@ final class CrawlApiTest extends TestCase
     {
         Http::fake(['*' => Http::response([], 200)]);
 
-        $this->actingAs($this->user())->getJson('/api/v1/crawls?limit=5')->assertOk();
+        $this->actingAs($this->user(), 'sanctum')->getJson('/api/v1/crawls?limit=5')->assertOk();
 
         Http::assertSent(fn ($request) => str_contains($request->url(), 'limit=5'));
     }
@@ -239,12 +229,12 @@ final class CrawlApiTest extends TestCase
         $user = $this->user();
 
         for ($i = 0; $i < 5; $i++) {
-            $this->actingAs($user)
+            $this->actingAs($user, 'sanctum')
                 ->postJson('/api/v1/crawls', ['start_url' => 'https://example.com'])
                 ->assertStatus(202);
         }
 
-        $this->actingAs($user)
+        $this->actingAs($user, 'sanctum')
             ->postJson('/api/v1/crawls', ['start_url' => 'https://example.com'])
             ->assertStatus(429);
     }
@@ -255,11 +245,11 @@ final class CrawlApiTest extends TestCase
         $noisy = $this->user();
 
         for ($i = 0; $i < 6; $i++) {
-            $this->actingAs($noisy)->postJson('/api/v1/crawls', ['start_url' => 'https://example.com']);
+            $this->actingAs($noisy, 'sanctum')->postJson('/api/v1/crawls', ['start_url' => 'https://example.com']);
         }
 
         // A second user must not inherit the first one's exhausted budget.
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->postJson('/api/v1/crawls', ['start_url' => 'https://example.com'])
             ->assertStatus(202);
     }

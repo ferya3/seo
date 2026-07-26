@@ -16,9 +16,10 @@
 | رله outbox (`shared/relay.py`) | ✅ کار می‌کند، مسیر کامل روی Postgres + RabbitMQ واقعی اجرا شد | outbox → بروکر → مصرف‌کننده؛ `event_id` استیج‌شده تا انتهای مسیر همان می‌ماند |
 | سرویس Crawl (`services/crawl`) | ✅ کار می‌کند، ۲۱ تست | API با FastAPI + ورکر باس، هر دو روی یک `run_crawl` |
 | سرویس Keyword (`services/keyword`) | ✅ کار می‌کند، ۲۳ تست | API با FastAPI + ورکر باس، هر دو روی یک `run_research` |
-| اسکیمای دیتابیس (`infra/db`) | ✅ روی Postgres 16 واقعی اجرا شد | هر دو مهاجرت روی دیتابیس خالی از صفر اعمال شدند، بدون خطا |
-| docker-compose | ⚠️ نوشته شده، اجرا نشده | Postgres، Redis، RabbitMQ، Qdrant، Meilisearch، MinIO + سرویس‌های ما (اینجا داکر دیمن نبود) |
-| API Gateway (`apps/api-gateway`) | ✅ کار می‌کند، ۴۱ تست | Laravel 13 روی PHP 8.4؛ Sanctum، تنانسی از توکن، rate limit، ترجمه‌ی خطای سرویس‌ها. سرتاسری هم اجرا شد: توکن → گیت‌وی → سرویس Keyword → Postgres |
+| اسکیمای دیتابیس (`infra/db`) | ✅ روی Postgres 16 واقعی اجرا شد | هر سه مهاجرت روی دیتابیس خالی از صفر اعمال شدند، بدون خطا |
+| docker-compose | ⚠️ نوشته شده، اجرا نشده | Postgres، Redis، RabbitMQ، Qdrant، Meilisearch، MinIO + سرویس‌های ما و گیت‌وی (اینجا داکر دیمن نبود) |
+| API Gateway (`apps/api-gateway`) | ✅ کار می‌کند، ۷۱ تست روی Postgres واقعی | Laravel 13 روی PHP 8.4؛ Sanctum، تنانسی از توکن، rate limit، ترجمه‌ی خطای سرویس‌ها |
+| Auth و Projects | ✅ کار می‌کند | ثبت‌نام/ورود/خروج + CRUD پروژه، همان جدول‌های `tenants`/`users`/`projects` که سرویس‌ها به آن‌ها FK دارند |
 | بقیه سرویس‌ها و ایجنت‌ها | ❌ شروع نشده | SERP، Content، Optimizer، Internal Links، Competitor، Rank، GSC، Orchestrator |
 | Frontend (Nuxt) | ❌ شروع نشده | داشبورد فعلی همان Flask داخل موتور است |
 | k8s / terraform / monitoring | ❌ شروع نشده | |
@@ -48,8 +49,7 @@ pytest                       # ۲۰۱ تست، ۲۶ skip
 
 ```bash
 createdb seo
-psql -d seo -f infra/db/migrations/0001_core.sql
-psql -d seo -f infra/db/migrations/0002_research.sql
+for f in infra/db/migrations/*.sql; do psql -d seo -f "$f"; done
 TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo pytest    # ۲۲۷ تست
 ```
 
@@ -118,12 +118,36 @@ idempotent است. پیام خراب به DLQ می‌رود نه اینکه بی
 این بود که **هر خطای پایین‌دستی به ۵۰۰ تبدیل می‌شد**. `php -l` این را نمی‌بیند؛
 فقط اجرا کردنش دید.
 
-**تنانت ناشناخته، خطای ۵۰۰ نیست.** گیت‌وی `tenant_id` را از توکن می‌گیرد و
-جلو می‌فرستد، ولی دیتابیس سرویس‌ها ممکن است آن تنانت را نشناسد. کلید خارجی
-درست کار می‌کند و جلویش را می‌گیرد — ولی قبلاً به‌صورت ۵۰۰ بیرون می‌آمد، یعنی
-«ما خرابیم» به کسی که خودش به جای خالی اشاره کرده بود. حالا
-`ForeignKeyViolation` به `UnknownTenant` و بعد به ۴۰۰ سرویس و ۴۲۲ گیت‌وی
-تبدیل می‌شود. ساختن خود تنانت کار سرویس Auth است که هنوز نوشته نشده.
+**تنانت ناشناخته، خطای ۵۰۰ نیست.** `ForeignKeyViolation` به `UnknownTenant`
+و بعد به ۴۰۰ سرویس و ۴۲۲ گیت‌وی تبدیل می‌شود، با متن قابل‌فهم.
+
+**یک دیتابیس، نه دو تا.** ریشه‌ی مشکل بالا این بود که گیت‌وی کاربرهایش را در
+SQLite خودش نگه می‌داشت و `tenants` جای دیگری بود، و هیچ‌چیز آن دو را همگام
+نمی‌کرد. حالا گیت‌وی روی همان Postgres سرویس‌ها می‌نویسد و فایل‌های
+`infra/db/migrations/` مرجع اسکیمای آن هستند — به همین دلیل ستون
+`password_hash` به `password` لاراولی تغییر نام نداد: ستون مشترک است و
+فریم‌ورک فقط یکی از مصرف‌کننده‌هایش. هویت و تنانسی‌ای که سرویس‌ها اعمال
+می‌کنند باید **همان ردیف‌ها** باشند، وگرنه کلید خارجی فقط تزئین است.
+
+**`project_id` هم باید بررسی شود، نه فقط `tenant_id`.** تنانت امن بود چون
+هیچ‌وقت از بدنه‌ی درخواست نمی‌آمد؛ ولی `project_id` می‌آمد و بدون بررسی جلو
+فرستاده می‌شد. کلید خارجی فقط ثابت می‌کند پروژه *وجود دارد*، نه اینکه مال
+درخواست‌کننده است — پس هرکسی با یک شناسه‌ی پروژه می‌توانست کار را به نام پروژه‌ی
+تنانت دیگری ثبت کند. حالا از `Project::ownedBy` رد می‌شود.
+
+**پروژه‌ی تنانت دیگر، ۴۰۴ می‌گیرد نه ۴۰۳.** ۴۰۳ تأیید می‌کند که آن پروژه وجود
+دارد و مال کس دیگری است — خودش یک افشای اطلاعات است.
+
+**Sanctum فقط توکن، بدون session.** مقدار پیش‌فرض `guard => ['web']` باعث
+می‌شود اول session چک شود و بعد توکن. روی یک API این دو جور غلط است: یک کوکی
+می‌تواند درخواست API را احراز هویت کند (و CSRF را برمی‌گرداند)، و ابطال توکن
+درخواستی را که با session احراز شده متوقف نمی‌کند.
+
+**تست‌های گیت‌وی روی Postgres واقعی اجرا می‌شوند، نه SQLite.** گیت‌وی حالا به
+چیزهایی وابسته است که SQLite ندارد: کلید UUID، `CITEXT` برای یکتایی ایمیل
+بدون حساسیت به حروف، و کلید خارجی به جدول‌هایی که سرویس‌های پایتون می‌نویسند.
+تست روی موتور دیگری یعنی دقیقاً همان حالت‌های جالب — `Ali@` در برابر `ali@` —
+در تست سبز و در واقعیت قرمز باشند.
 
 **بازگشت به فایل، بی‌صدا نیست.** اگر `DATABASE_URL` ست باشد ولی دیتابیس در
 دسترس نباشد، سرویس بالا می‌آید و روی فایل کار می‌کند — ولی با لاگ سطح خطا.
@@ -132,24 +156,35 @@ idempotent است. پیام خراب به DLQ می‌رود نه اینکه بی
 
 ## اجرای گیت‌وی
 
+گیت‌وی مهاجرت خودش را ندارد؛ اسکیما از فایل‌های SQL می‌آید:
+
 ```bash
+createdb seo
+for f in infra/db/migrations/*.sql; do psql -d seo -f "$f"; done
+
 cd apps/api-gateway
 composer install
-cp .env.example .env && php artisan key:generate
-touch database/database.sqlite && php artisan migrate
-php artisan test                       # ۴۱ تست
-KEYWORD_SERVICE_URL=http://127.0.0.1:8102 php artisan serve
+cp .env.example .env && php artisan key:generate     # DB_URL و REDIS_HOST را تنظیم کن
+TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo php artisan test   # ۷۱ تست
+php artisan serve
 ```
 
-توکن با `php artisan tinker` ساخته می‌شود: `$user->createToken('name')->plainTextToken`.
-تنانت باید در جدول `tenants` دیتابیس سرویس‌ها وجود داشته باشد وگرنه ۴۲۲
-می‌گیری — تا وقتی سرویس Auth ساخته شود، دستی اضافه‌اش کن.
+بدون `TEST_DATABASE_URL` کل سوئیت skip می‌شود — همان انضباط `shared/tests`.
+
+مسیر کامل یک کاربر:
+
+```bash
+curl -X POST localhost:8000/api/v1/auth/register \
+  -d '{"name":"...","email":"...","password":"...","tenant_name":"..."}'
+# → {"user": {...}, "token": "..."}   تنانت ساخته شد، سرویس‌ها می‌شناسندش
+curl -X POST localhost:8000/api/v1/projects   -H "Authorization: Bearer $TOKEN" ...
+curl -X POST localhost:8000/api/v1/research   -H "Authorization: Bearer $TOKEN" ...
+```
 
 ## قدم بعدی
 
-۱. سرویس Auth/Project — الان تنها حلقه‌ی گم‌شده‌ی زنجیره است: گیت‌وی کاربر و
-   توکن دارد، سرویس‌ها جدول `tenants` دارند، ولی هیچ‌کس تنانت را نمی‌سازد
-۲. بالا آوردن docker-compose به‌صورت کامل (اینجا داکر دیمن نبود؛ همه‌ی
-   اجزا تک‌تک روی Postgres و RabbitMQ واقعی اجرا شدند، ولی نه از طریق compose)
-۳. سرویس بعدی: SERP
-۴. Orchestrator و ایجنت‌ها
+۱. بالا آوردن docker-compose به‌صورت کامل (اینجا داکر دیمن نبود؛ همه‌ی اجزا
+   تک‌تک روی Postgres، RabbitMQ و Redis واقعی اجرا شدند، ولی نه از طریق compose)
+۲. سرویس بعدی: SERP
+۳. Orchestrator و ایجنت‌ها
+۴. Frontend

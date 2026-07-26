@@ -17,6 +17,8 @@ use Illuminate\Http\Request;
  */
 final class KeywordController extends Controller
 {
+    use ResolvesProject;
+
     public function __construct(private readonly KeywordServiceClient $keywords)
     {
     }
@@ -37,7 +39,7 @@ final class KeywordController extends Controller
 
         // Tenancy comes from the authenticated principal, never the body.
         $validated['tenant_id'] = $request->user()?->tenant_id;
-        $validated['project_id'] = $request->input('project_id');
+        $validated['project_id'] = $this->ownedProjectId($request);
         $validated['correlation_id'] = $request->header('X-Correlation-Id');
 
         try {

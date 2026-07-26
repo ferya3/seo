@@ -39,5 +39,9 @@ class AppServiceProvider extends ServiceProvider
         // tighter budget rather than sharing the general one.
         RateLimiter::for('crawls', fn (Request $request) => Limit::perMinute(5)
             ->by($request->user()?->id ?: $request->ip()));
+
+        // Register and login have no user to key on, so IP is all there is.
+        // Tight, because these are the endpoints worth guessing at.
+        RateLimiter::for('auth', fn (Request $request) => Limit::perMinute(10)->by($request->ip()));
     }
 }

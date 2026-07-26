@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\Tenant;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
 
 /**
@@ -18,29 +17,20 @@ use Tests\TestCase;
  */
 final class KeywordApiTest extends TestCase
 {
-    use RefreshDatabase;
-
     private const ACCEPTED = [
         'research_id' => 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
         'status' => 'queued',
         'result_url' => '/v1/research/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
     ];
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-        RateLimiter::clear('api');
-        Http::preventStrayRequests();
-    }
 
-    private function user(?string $tenantId = null): User
+    /**
+     * The tenant is a real row now, not a made-up uuid: users.tenant_id has a
+     * foreign key, so an invented tenant no longer inserts.
+     */
+    private function user(?Tenant $tenant = null): User
     {
-        $user = User::factory()->create();
-        if ($tenantId !== null) {
-            $user->forceFill(['tenant_id' => $tenantId])->save();
-        }
-
-        return $user;
+        return User::factory()->inTenant($tenant ?? Tenant::factory()->create())->create();
     }
 
     public function test_an_unauthenticated_request_is_rejected(): void
@@ -56,7 +46,7 @@ final class KeywordApiTest extends TestCase
     {
         Http::fake(['*/v1/research' => Http::response(self::ACCEPTED, 202)]);
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->postJson('/api/v1/research', ['seed' => 'کفش ورزشی'])
             ->assertStatus(202)
             ->assertJson(self::ACCEPTED);
@@ -74,7 +64,7 @@ final class KeywordApiTest extends TestCase
         Http::fake(['*/v1/research' => Http::response(self::ACCEPTED, 202)]);
         $seed = 'خرید کفش ورزشی زنانه';
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->postJson('/api/v1/research', ['seed' => $seed])
             ->assertStatus(202);
 
@@ -84,16 +74,16 @@ final class KeywordApiTest extends TestCase
     public function test_a_tenant_id_in_the_body_is_ignored(): void
     {
         Http::fake(['*/v1/research' => Http::response(self::ACCEPTED, 202)]);
-        $mine = '11111111-1111-1111-1111-111111111111';
+        $mine = Tenant::factory()->create();
 
-        $this->actingAs($this->user($mine))
+        $this->actingAs($this->user($mine), 'sanctum')
             ->postJson('/api/v1/research', [
                 'seed' => 'کفش',
                 'tenant_id' => '22222222-2222-2222-2222-222222222222',
             ])
             ->assertStatus(202);
 
-        Http::assertSent(fn ($request) => $request['tenant_id'] === $mine);
+        Http::assertSent(fn ($request) => $request['tenant_id'] === $mine->id);
     }
 
     /** @return array<string, array{array<string, mixed>}> */
@@ -116,7 +106,7 @@ final class KeywordApiTest extends TestCase
     {
         Http::fake();
 
-        $this->actingAs($this->user())->postJson('/api/v1/research', $body)->assertStatus(422);
+        $this->actingAs($this->user(), 'sanctum')->postJson('/api/v1/research', $body)->assertStatus(422);
 
         Http::assertNothingSent();
     }
@@ -125,7 +115,7 @@ final class KeywordApiTest extends TestCase
     {
         Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('refused'));
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->postJson('/api/v1/research', ['seed' => 'کفش'])
             ->assertStatus(503)
             ->assertJson(['error' => 'keyword service unavailable']);
@@ -135,7 +125,7 @@ final class KeywordApiTest extends TestCase
     {
         Http::fake(['*' => Http::response(['detail' => 'research not found'], 404)]);
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->getJson('/api/v1/research/'.self::ACCEPTED['research_id'])
             ->assertStatus(404);
     }
@@ -150,7 +140,7 @@ final class KeywordApiTest extends TestCase
         ];
         Http::fake(['*' => Http::response($result, 200)]);
 
-        $this->actingAs($this->user())
+        $this->actingAs($this->user(), 'sanctum')
             ->getJson('/api/v1/research/'.self::ACCEPTED['research_id'])
             ->assertOk()
             ->assertJson($result);
@@ -162,9 +152,9 @@ final class KeywordApiTest extends TestCase
         $user = $this->user();
 
         for ($i = 0; $i < 5; $i++) {
-            $this->actingAs($user)->postJson('/api/v1/research', ['seed' => 'کفش'])->assertStatus(202);
+            $this->actingAs($user, 'sanctum')->postJson('/api/v1/research', ['seed' => 'کفش'])->assertStatus(202);
         }
 
-        $this->actingAs($user)->postJson('/api/v1/research', ['seed' => 'کفش'])->assertStatus(429);
+        $this->actingAs($user, 'sanctum')->postJson('/api/v1/research', ['seed' => 'کفش'])->assertStatus(429);
     }
 }
