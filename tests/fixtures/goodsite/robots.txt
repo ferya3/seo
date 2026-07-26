@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /search
+
+Sitemap: http://127.0.0.1:PORT/sitemap.xml

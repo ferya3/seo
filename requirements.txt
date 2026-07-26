@@ -1,0 +1,8 @@
+# هسته — لازم
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+flask>=3.0
+
+# اختیاری — فقط برای لایه‌ی پیشنهادهای هوش مصنوعی
+# pip install anthropic

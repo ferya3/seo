@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}ایجنت سئو — داشبورد{% endblock %}
+
+{% block content %}
+<div class="tabs" data-tabs role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-panel="panel-audit">بررسی سئوی سایت</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="panel-keywords">تحقیق کلمات کلیدی</button>
+</div>
+
+<!-- ------------------------------------------------------------- audit -->
+<section id="panel-audit" class="tabpanel" role="tabpanel">
+  <form class="card" id="audit-form">
+    <h2>بررسی کامل سئوی سایت</h2>
+    <p class="hint">
+      سایت را با ربات موبایل می‌خزیم (گوگل از جولای ۲۰۲۴ فقط با Googlebot موبایل ایندکس می‌کند)،
+      بیش از ۴۰ قانون سئو رویش اجرا می‌کنیم و ایرادها را به‌ترتیب اهمیت می‌دهیم.
+    </p>
+
+    <div class="field">
+      <label for="url">آدرس سایت</label>
+      <input type="text" id="url" name="url" placeholder="example.com یا https://example.com" required dir="ltr">
+    </div>
+
+    <div class="field">
+      <label for="keywords">کلمات کلیدی هدف <span class="desc">(اختیاری، با ویرگول جدا کن)</span></label>
+      <input type="text" id="keywords" name="keywords" placeholder="آموزش سئو, خدمات سئو, مشاور سئو">
+      <p class="desc">اگر پرشان کنی، بررسی می‌کنیم این عبارت‌ها در عنوان، H1 و متن کجا آمده‌اند و آیا چند صفحه سر یک کلمه با هم رقابت می‌کنند.</p>
+    </div>
+
+    <div class="row three">
+      <div class="field">
+        <label for="max_pages">حداکثر صفحات</label>
+        <input type="number" id="max_pages" name="max_pages" value="30" min="1" max="300">
+      </div>
+      <div class="field">
+        <label for="max_depth">حداکثر عمق</label>
+        <input type="number" id="max_depth" name="max_depth" value="3" min="1" max="8">
+      </div>
+      <div class="field">
+        <label for="user_agent">ربات</label>
+        <select id="user_agent" name="user_agent">
+          <option value="mobile" selected>موبایل (پیشنهادی)</option>
+          <option value="desktop">دسکتاپ</option>
+          <option value="googlebot">Googlebot موبایل</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>تنظیمات</label>
+      <div class="checks">
+        <label class="check"><input type="checkbox" name="respect_robots" checked> رعایت robots.txt</label>
+        <label class="check"><input type="checkbox" name="check_links" checked> بررسی لینک‌های خارجی</label>
+        <label class="check"><input type="checkbox" name="subdomains"> شامل زیردامنه‌ها</label>
+        <label class="check"><input type="checkbox" name="include_psi"> داده‌ی واقعی Core Web Vitals (کندتر)</label>
+        <label class="check">
+          <input type="checkbox" name="use_ai" {% if not ai_enabled %}disabled{% endif %}>
+          پیشنهادهای هوش مصنوعی
+          {% if not ai_enabled %}<span class="desc">(ANTHROPIC_API_KEY تنظیم نشده)</span>{% endif %}
+        </label>
+      </div>
+    </div>
+
+    <button type="submit" class="primary">شروع بررسی</button>
+
+    <div class="progress" hidden>
+      <div class="bar"><span></span></div>
+      <div class="progress-text"><span class="msg"></span><span class="pct"></span></div>
+    </div>
+    <div class="alert error" hidden></div>
+  </form>
+</section>
+
+<!-- ---------------------------------------------------------- keywords -->
+<section id="panel-keywords" class="tabpanel" role="tabpanel" hidden>
+  <form class="card" id="keyword-form">
+    <h2>تحقیق کلمات کلیدی</h2>
+    <p class="hint">
+      از پیشنهاد خودکار گوگل، یوتیوب، بینگ و داک‌داک‌گو استفاده می‌کنیم — همان چیزی که کاربران
+      همین حالا تایپ می‌کنند. عبارت اولیه با ده‌ها الگوی سؤالی، خریدی و مقایسه‌ای گسترش داده می‌شود.
+    </p>
+
+    <div class="field">
+      <label for="seed">موضوع یا عبارت اولیه</label>
+      <input type="text" id="seed" name="seed" placeholder="مثلاً: قهوه اسپرسو، طراحی سایت، رژیم کتوژنیک" required>
+    </div>
+
+    <div class="row three">
+      <div class="field">
+        <label for="lang">زبان</label>
+        <select id="lang" name="lang">
+          <option value="fa" selected>فارسی</option>
+          <option value="en">انگلیسی</option>
+          <option value="ar">عربی</option>
+          <option value="tr">ترکی</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="country">کشور</label>
+        <select id="country" name="country">
+          <option value="IR" selected>ایران</option>
+          <option value="US">آمریکا</option>
+          <option value="GB">بریتانیا</option>
+          <option value="DE">آلمان</option>
+          <option value="AE">امارات</option>
+          <option value="TR">ترکیه</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="max_keywords">حداکثر کلمات</label>
+        <input type="number" id="max_keywords" name="max_keywords" value="200" min="20" max="1000">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>منابع</label>
+      <div class="checks">
+        <label class="check"><input type="checkbox" name="sources" value="google" checked> گوگل</label>
+        <label class="check"><input type="checkbox" name="sources" value="youtube" checked> یوتیوب</label>
+        <label class="check"><input type="checkbox" name="sources" value="bing" checked> بینگ</label>
+        <label class="check"><input type="checkbox" name="sources" value="duckduckgo" checked> داک‌داک‌گو</label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>روش‌های گسترش</label>
+      <div class="checks">
+        <label class="check"><input type="checkbox" name="questions" checked> عبارت‌های سؤالی</label>
+        <label class="check"><input type="checkbox" name="alphabet" checked> پویش الفبایی</label>
+        <label class="check"><input type="checkbox" name="comparisons" checked> مقایسه‌ای</label>
+        <label class="check">
+          <input type="checkbox" name="use_ai" {% if not ai_enabled %}disabled{% endif %}>
+          پیشنهادهای هوش مصنوعی
+          {% if not ai_enabled %}<span class="desc">(ANTHROPIC_API_KEY تنظیم نشده)</span>{% endif %}
+        </label>
+      </div>
+    </div>
+
+    <button type="submit" class="primary">پیدا کن</button>
+
+    <div class="progress" hidden>
+      <div class="bar"><span></span></div>
+      <div class="progress-text"><span class="msg"></span><span class="pct"></span></div>
+    </div>
+    <div class="alert error" hidden></div>
+  </form>
+</section>
+
+{% if jobs %}
+<div class="card">
+  <h2>گزارش‌های اخیر</h2>
+  <p class="hint">گزارش‌ها در حافظه نگه داشته می‌شوند و با بستن سرور پاک می‌شوند. برای نگه‌داشتن، خروجی Markdown یا JSON بگیر.</p>
+  <div class="joblist">
+    {% for job in jobs %}
+    <div class="jobrow">
+      <span class="label">
+        {{ 'بررسی سایت' if job.kind == 'audit' else 'کلمات کلیدی' }} —
+        <span class="{{ 'url' if job.kind == 'audit' }}">{{ job.label }}</span>
+      </span>
+      <span>
+        <span class="muted">{{ job.created_at }}</span>
+        {% if job.status == 'done' %}
+          <a href="/report/{{ job.id }}">مشاهده</a>
+        {% else %}
+          <span class="status-{{ job.status }}">{{ job.message }}</span>
+        {% endif %}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

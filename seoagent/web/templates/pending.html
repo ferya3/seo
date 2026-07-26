@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}در حال اجرا…{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>هنوز در حال اجراست</h2>
+  <p class="hint">{{ job.message }}</p>
+  <div class="bar"><span style="width: {{ job.percent }}%"></span></div>
+  <p class="muted" style="margin-top:.6rem">این صفحه هر ۲ ثانیه خودش را تازه می‌کند.</p>
+  <div class="actions"><a class="chip" href="/">بازگشت به داشبورد</a></div>
+</div>
+{% endblock %}
+{% block scripts %}<script>setTimeout(() => location.reload(), 2000);</script>{% endblock %}

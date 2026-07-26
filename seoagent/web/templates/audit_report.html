@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}گزارش سئو — {{ data.start_url }}{% endblock %}
+
+{% macro dial_color(score) -%}
+  {%- if score >= 75 -%}var(--good){%- elif score >= 50 -%}var(--medium){%- else -%}var(--critical){%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+<div class="card">
+  <div class="score-hero">
+    <div class="score-dial" style="--value: {{ data.overall_score }}; --dial: {{ dial_color(data.overall_score) }}">
+      <div style="text-align:center">
+        <div class="val">{{ data.overall_score }}</div>
+        <div class="lbl">{{ data.grade }}</div>
+      </div>
+    </div>
+    <div style="flex:1; min-width:260px">
+      <h2 style="margin-bottom:.2rem">گزارش سئو</h2>
+      <div class="url" style="font-size:.95rem">{{ data.start_url }}</div>
+      <p class="muted" style="margin:.3rem 0 0">
+        {{ data.generated_at }} · {{ data.stats.pages_crawled }} صفحه خزیده شد ·
+        {{ data.stats.total_issues }} ایراد ({{ data.stats.critical_count }} بحرانی، {{ data.stats.high_count }} با اهمیت زیاد)
+      </p>
+    </div>
+  </div>
+
+  <div class="actions">
+    <a class="chip" href="/api/job/{{ job.id }}/export.md">دانلود Markdown</a>
+    <a class="chip" href="/api/job/{{ job.id }}/result" target="_blank" rel="noopener">خروجی JSON</a>
+    <a class="chip" href="/">بررسی جدید</a>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat"><div class="n">{{ data.stats.indexable_pages }}</div><div class="k">صفحه قابل ایندکس</div></div>
+    <div class="stat"><div class="n">{{ data.stats.errors }}</div><div class="k">خطا (۴xx/۵xx)</div></div>
+    <div class="stat"><div class="n">{{ data.stats.redirects }}</div><div class="k">ریدایرکت</div></div>
+    <div class="stat"><div class="n">{{ data.stats.avg_words }}</div><div class="k">میانگین کلمات</div></div>
+    <div class="stat"><div class="n">{{ data.stats.avg_load_ms }}</div><div class="k">میانگین پاسخ (ms)</div></div>
+    <div class="stat"><div class="n">{{ data.stats.sitemap_urls }}</div><div class="k">آدرس در سایت‌مپ</div></div>
+  </div>
+</div>
+
+{% if data.notes %}
+<div class="alert note">
+  {% for note in data.notes %}<div>{{ note }}</div>{% endfor %}
+</div>
+{% endif %}
+
+<div class="grid cols-2">
+  <div class="card">
+    <h2>امتیاز هر بخش</h2>
+    <p class="hint">پایین‌ترین امتیازها اول آمده‌اند.</p>
+    <div class="cat-list">
+      {% for cat in data.category_scores %}
+      <div class="cat">
+        <div>
+          <div class="name">{{ cat.label_fa }}</div>
+          <div class="en">{{ cat.label_en }} · {{ cat.issue_count }} ایراد</div>
+        </div>
+        <div class="score" style="color: {{ dial_color(cat.score) }}">{{ cat.score }}</div>
+        <div class="track"><span style="width: {{ cat.score }}%; background: {{ dial_color(cat.score) }}"></span></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>از کجا شروع کنم</h2>
+    <p class="hint">بیشترین اثر نسبت به کمترین زحمت.</p>
+    {% if data.quick_wins %}
+    <ol class="plain">
+      {% for issue in data.quick_wins %}
+      <li style="margin-bottom:.6rem">
+        <strong>{{ issue.title_fa }}</strong>
+        <span class="badge">{{ issue.severity_fa }}</span>
+        {% if issue.affected_count %}<span class="badge">{{ issue.affected_count }} صفحه</span>{% endif %}
+        <div class="muted" style="font-size:.88rem">{{ issue.fix_fa }}</div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="muted">ایراد پرتکراری پیدا نشد — وضعیت پایه خوب است.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if data.psi and not data.psi.error and data.psi.field %}
+<div class="card">
+  <h2>Core Web Vitals — داده‌ی واقعی کاربران</h2>
+  <p class="hint">از گزارش تجربه‌ی کاربران کروم (CrUX)، صدک ۷۵ کاربران واقعی این آدرس.</p>
+  <div class="stat-grid">
+    {% for key, metric in data.psi.field.items() %}
+    <div class="stat">
+      <div class="n" style="color: {% if metric.status == 'good' %}var(--good){% elif metric.status == 'poor' %}var(--critical){% else %}var(--medium){% endif %}">
+        {{ '%g'|format(metric.value) }}{{ ' ms' if metric.unit else '' }}
+      </div>
+      <div class="k">{{ key }} — {{ metric.label_fa }}</div>
+    </div>
+    {% endfor %}
+    {% if data.psi.lab_score is defined %}
+    <div class="stat"><div class="n">{{ data.psi.lab_score }}</div><div class="k">امتیاز لایت‌هاوس</div></div>
+    {% endif %}
+  </div>
+</div>
+{% elif data.psi and data.psi.error %}
+<div class="alert warn">{{ data.psi.error }}</div>
+{% endif %}
+
+{% if data.ai_suggestions %}
+<div class="card">
+  <h2>تحلیل هوش مصنوعی</h2>
+  {% if data.ai_suggestions.error %}
+    <div class="alert warn">{{ data.ai_suggestions.error }}</div>
+  {% else %}
+    <p>{{ data.ai_suggestions.summary }}</p>
+
+    {% if data.ai_suggestions.priorities %}
+    <h3 class="section-title">اولویت‌های اقدام</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>اقدام</th><th>چرا</th><th>زحمت</th><th>اثر</th></tr></thead>
+        <tbody>
+          {% for item in data.ai_suggestions.priorities %}
+          <tr>
+            <td><strong>{{ item.action }}</strong></td>
+            <td>{{ item.why }}</td>
+            <td><span class="tag">{{ item.effort }}</span></td>
+            <td><span class="tag">{{ item.impact }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if data.ai_suggestions.title_rewrites %}
+    <h3 class="section-title">پیشنهاد بازنویسی عنوان و توضیحات</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>صفحه</th><th>عنوان فعلی</th><th>عنوان پیشنهادی</th><th>متا دیسکریپشن پیشنهادی</th></tr></thead>
+        <tbody>
+          {% for item in data.ai_suggestions.title_rewrites %}
+          <tr>
+            <td class="url">{{ item.url }}</td>
+            <td class="muted">{{ item.current }}</td>
+            <td><strong>{{ item.suggested }}</strong></td>
+            <td>{{ item.meta_description }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if data.ai_suggestions.content_gaps %}
+    <h3 class="section-title">شکاف‌های محتوایی</h3>
+    <ul class="plain">
+      {% for gap in data.ai_suggestions.content_gaps %}<li>{{ gap }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>ایرادها (<span id="issue-count">{{ data.issues|length }}</span>)</h2>
+
+  <div class="filters" data-filter-group="severity">
+    <button class="chip" data-value="all" aria-pressed="true">همه</button>
+    <button class="chip" data-value="critical" aria-pressed="false">بحرانی</button>
+    <button class="chip" data-value="high" aria-pressed="false">زیاد</button>
+    <button class="chip" data-value="medium" aria-pressed="false">متوسط</button>
+    <button class="chip" data-value="low" aria-pressed="false">کم</button>
+    <button class="chip" data-value="info" aria-pressed="false">اطلاعی</button>
+  </div>
+
+  {% for issue in data.issues %}
+  <details class="issue" data-issue data-severity="{{ issue.severity }}" data-category="{{ issue.category }}">
+    <summary>
+      <span class="sev sev-{{ issue.severity }}"></span>
+      <span class="head">
+        <span class="t-fa">{{ issue.title_fa }}</span>
+        <div class="t-en">{{ issue.title_en }}</div>
+        <div class="meta">
+          <span class="badge">{{ issue.severity_fa }}</span>
+          <span class="badge">{{ issue.category_fa }}</span>
+          {% if issue.affected_count %}<span class="badge">{{ issue.affected_count }} مورد</span>{% endif %}
+        </div>
+      </span>
+    </summary>
+    <div class="body">
+      <p>{{ issue.detail_fa }}</p>
+      <h4>راه‌حل</h4>
+      <div class="fix">{{ issue.fix_fa }}</div>
+      {% if issue.evidence %}
+      <h4>نمونه</h4>
+      <p class="muted" style="font-size:.88rem">{{ issue.evidence }}</p>
+      {% endif %}
+      {% if issue.urls %}
+      <h4>آدرس‌ها</h4>
+      <div class="url-list">
+        {% for url in issue.urls %}<div class="url">{{ url }}</div>{% endfor %}
+        {% if issue.affected_count > issue.urls|length %}
+        <div class="muted">… و {{ issue.affected_count - issue.urls|length }} مورد دیگر (در خروجی JSON کامل است)</div>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% if issue.docs %}
+      <p style="margin-top:.8rem"><a href="{{ issue.docs }}" target="_blank" rel="noopener">مستندات مرجع ↗</a></p>
+      {% endif %}
+    </div>
+  </details>
+  {% else %}
+  <p class="muted">هیچ ایرادی پیدا نشد.</p>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>صفحات خزیده‌شده</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>آدرس</th><th>کد</th><th>عنوان</th><th>کلمات</th><th>لینک ورودی</th><th>عمق</th><th>پاسخ</th></tr>
+      </thead>
+      <tbody>
+        {% for page in data.pages %}
+        <tr>
+          <td class="url" style="max-width:320px; overflow:hidden; text-overflow:ellipsis">{{ page.url }}</td>
+          <td class="{{ 'pill-good' if page.status == 200 else 'pill-bad' }}">{{ page.status or '—' }}</td>
+          <td style="max-width:260px; overflow:hidden; text-overflow:ellipsis">{{ page.title or '—' }}</td>
+          <td>{{ page.words }}</td>
+          <td>{{ page.inlinks }}</td>
+          <td>{{ page.depth }}</td>
+          <td>{{ page.load_ms }} ms</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

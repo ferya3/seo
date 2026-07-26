@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}گزارش پیدا نشد{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>این گزارش پیدا نشد</h2>
+  <p class="hint">
+    شناسه‌ی <span class="url">{{ job_id }}</span> در حافظه نیست. گزارش‌ها فقط تا وقتی سرور
+    روشن است نگه داشته می‌شوند؛ اگر سرور را ری‌استارت کرده‌ای باید دوباره اجرا کنی.
+  </p>
+  <div class="actions"><a class="chip" href="/">بازگشت به داشبورد</a></div>
+</div>
+{% endblock %}

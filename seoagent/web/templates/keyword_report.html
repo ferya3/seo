@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}کلمات کلیدی — {{ data.seed }}{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>تحقیق کلمات کلیدی — «{{ data.seed }}»</h2>
+  <p class="hint">
+    {{ data.total }} کلمه کلیدی از {{ data.queries_sent }} پرس‌وجو به موتورهای جستجو
+    ({{ data.lang }} / {{ data.country }})
+  </p>
+
+  <div class="actions">
+    <a class="chip" href="/api/job/{{ job.id }}/export.md">دانلود Markdown</a>
+    <a class="chip" href="/api/job/{{ job.id }}/result" target="_blank" rel="noopener">خروجی JSON</a>
+    <a class="chip" href="/">جستجوی جدید</a>
+  </div>
+
+  <div class="stat-grid">
+    {% for intent, count in data.by_intent.items() %}
+    <div class="stat">
+      <div class="n">{{ count }}</div>
+      <div class="k">
+        {%- if intent == 'informational' -%}اطلاعاتی
+        {%- elif intent == 'commercial' -%}بررسی قبل از خرید
+        {%- elif intent == 'transactional' -%}خرید / اقدام
+        {%- elif intent == 'local' -%}محلی
+        {%- else -%}برند / ناوبری{%- endif -%}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="alert note" style="margin-top:1rem">
+    امتیاز «تقاضا» و «فرصت» تخمینی و نسبی است: از تعداد موتورهایی که یک عبارت را پیشنهاد می‌دهند،
+    تکرار آن در پرس‌وجوهای مختلف و جایگاهش در فهرست پیشنهادها محاسبه می‌شود. این حجم جستجوی
+    واقعی نیست — برای عدد دقیق باید از Google Keyword Planner یا سرچ کنسول استفاده کنی.
+  </div>
+</div>
+
+{% if data.errors %}
+<div class="alert warn">
+  {% for error in data.errors %}<div>{{ error }}</div>{% endfor %}
+</div>
+{% endif %}
+
+{% if data.trending %}
+<div class="card">
+  <h2>ترندهای امروز گوگل</h2>
+  <p class="hint">جستجوهایی که همین حالا در {{ data.country }} در حال اوج گرفتن هستند — برای محتوای به‌روز.</p>
+  <div class="filters">
+    {% for item in data.trending %}<span class="chip">{{ item }}</span>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if data.ai_suggestions %}
+<div class="card">
+  <h2>تحلیل هوش مصنوعی</h2>
+  {% if data.ai_suggestions.error %}
+    <div class="alert warn">{{ data.ai_suggestions.error }}</div>
+  {% else %}
+    <p>{{ data.ai_suggestions.summary }}</p>
+
+    {% for angle in data.ai_suggestions.angles %}
+    <details class="issue" style="margin-top:.75rem">
+      <summary>
+        <span class="sev sev-low"></span>
+        <span class="head">
+          <span class="t-fa">{{ angle.title }}</span>
+          <div class="meta">
+            <span class="badge">{{ angle.target_keyword }}</span>
+            <span class="badge">{{ angle.intent }}</span>
+          </div>
+        </span>
+      </summary>
+      <div class="body">
+        <h4>ساختار پیشنهادی</h4>
+        <ul class="plain">{% for heading in angle.outline %}<li>{{ heading }}</li>{% endfor %}</ul>
+      </div>
+    </details>
+    {% endfor %}
+
+    {% if data.ai_suggestions.questions_to_answer %}
+    <h3 class="section-title">سؤال‌هایی که باید صریح جواب بدهی</h3>
+    <ul class="plain">
+      {% for question in data.ai_suggestions.questions_to_answer %}<li>{{ question }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if data.ai_suggestions.entities %}
+    <h3 class="section-title">موجودیت‌ها و اصطلاحات لازم برای پوشش معنایی</h3>
+    <div class="filters">
+      {% for entity in data.ai_suggestions.entities %}<span class="chip">{{ entity }}</span>{% endfor %}
+    </div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endif %}
+
+{% if data.plan %}
+<div class="card">
+  <h2>برنامه محتوایی پیشنهادی</h2>
+  <p class="hint">هر خوشه، یک صفحه. کلمه کلیدی اصلی را در عنوان و H1 بیاور و بقیه را در زیرتیترها و متن پخش کن.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>کلمه کلیدی اصلی</th><th>نوع صفحه</th><th>نیت</th><th>عنوان پیشنهادی</th><th>کلمات پشتیبان</th></tr>
+      </thead>
+      <tbody>
+        {% for item in data.plan %}
+        <tr>
+          <td><strong>{{ item.primary_keyword }}</strong></td>
+          <td>{{ item.page_type }}<div class="muted" style="font-size:.8rem">{{ item.must_include }}</div></td>
+          <td><span class="tag">{{ item.intent_fa }}</span></td>
+          <td>{{ item.suggested_title }}</td>
+          <td class="muted" style="font-size:.84rem">{{ item.supporting_keywords|join('، ') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if data.clusters %}
+<div class="card">
+  <h2>خوشه‌های موضوعی</h2>
+  {% for cluster in data.clusters %}
+  <details class="issue">
+    <summary>
+      <span class="sev sev-low"></span>
+      <span class="head">
+        <span class="t-fa">{{ cluster.label }}</span>
+        <div class="meta">
+          <span class="badge">{{ cluster.size }} عبارت</span>
+          <span class="badge">{{ cluster.intent_fa }}</span>
+          <span class="badge">میانگین تقاضا {{ cluster.avg_demand }}</span>
+        </div>
+      </span>
+    </summary>
+    <div class="body">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>کلمه کلیدی</th><th>تقاضا</th><th>فرصت</th><th>نیت</th></tr></thead>
+          <tbody>
+            {% for keyword in cluster.keywords %}
+            <tr>
+              <td>{{ keyword.keyword }}</td>
+              <td><div class="meter"><span style="width: {{ keyword.demand }}%"></span></div></td>
+              <td>{{ keyword.opportunity }}</td>
+              <td><span class="tag">{{ keyword.intent_fa }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>همه‌ی کلمات کلیدی (<span id="kw-count">{{ data.keywords|length }}</span>)</h2>
+  <div class="field">
+    <input type="text" id="kw-filter" placeholder="فیلتر زنده… مثلاً: قیمت">
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>کلمه کلیدی</th><th>تقاضا</th><th>فرصت</th><th>نیت</th><th>کلمه</th><th>منابع</th></tr>
+      </thead>
+      <tbody>
+        {% for keyword in data.keywords %}
+        <tr data-kw-row="{{ keyword.keyword|lower }}">
+          <td>{{ keyword.keyword }}</td>
+          <td>
+            <div class="meter" title="{{ keyword.demand }}"><span style="width: {{ keyword.demand }}%"></span></div>
+          </td>
+          <td>{{ keyword.opportunity }}</td>
+          <td><span class="tag">{{ keyword.intent_fa }}</span></td>
+          <td>{{ keyword.words }}{% if keyword.long_tail %} <span class="tag">دم‌بلند</span>{% endif %}</td>
+          <td class="muted" style="font-size:.8rem">{{ keyword.sources|join('، ') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if data.questions %}
+<div class="card">
+  <h2>پرسش‌های کاربران</h2>
+  <p class="hint">این‌ها را به‌عنوان زیرتیتر بگذار و بلافاصله زیرشان در دو تا سه جمله جواب کامل بده — همان چیزی که AI Overviews و اسنیپت‌های ویژه از آن پاسخ برمی‌دارند.</p>
+  <ul class="plain">{% for question in data.questions %}<li>{{ question }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if data.entities %}
+<div class="card">
+  <h2>موجودیت‌های مرتبط</h2>
+  <p class="hint">از ویکی‌پدیا — برای پوشش معنایی کامل موضوع مفیدند.</p>
+  <div class="filters">{% for entity in data.entities %}<span class="chip">{{ entity }}</span>{% endfor %}</div>
+</div>
+{% endif %}
+{% endblock %}
