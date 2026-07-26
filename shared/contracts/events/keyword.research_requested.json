@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/keyword.research_requested.json",
+  "title": "keyword.research_requested",
+  "description": "Keyword research has been asked for. Published by the gateway or the orchestrator; consumed by the keyword service.",
+  "type": "object",
+  "required": ["research_id", "seed"],
+  "additionalProperties": false,
+  "properties": {
+    "research_id": {"type": "string", "format": "uuid"},
+    "seed": {"type": "string", "minLength": 1, "maxLength": 200},
+    "lang": {"type": "string", "default": "fa"},
+    "country": {"type": "string", "default": "IR"},
+    "max_keywords": {"type": "integer", "minimum": 10, "maximum": 5000, "default": 200},
+    "include_questions": {"type": "boolean", "default": true},
+    "include_alphabet": {"type": "boolean", "default": true},
+    "include_comparisons": {"type": "boolean", "default": true},
+    "sources": {
+      "type": "array",
+      "items": {"enum": ["google", "youtube", "bing", "duckduckgo"]},
+      "default": ["google", "youtube", "bing", "duckduckgo"]
+    }
+  }
+}

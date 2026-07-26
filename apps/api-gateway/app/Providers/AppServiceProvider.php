@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\CrawlServiceClient;
+use App\Services\KeywordServiceClient;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -13,6 +14,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(CrawlServiceClient::class, fn () => CrawlServiceClient::fromConfig());
+        $this->app->singleton(KeywordServiceClient::class, fn () => KeywordServiceClient::fromConfig());
         //
     }
 

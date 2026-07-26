@@ -2,6 +2,13 @@
 
 return [
 
+    'keyword' => [
+        'url' => env('KEYWORD_SERVICE_URL', 'http://keyword-api:8000'),
+        // Research fans out hundreds of autocomplete queries, so it is slower
+        // to accept than a crawl request.
+        'timeout' => (int) env('KEYWORD_SERVICE_TIMEOUT', 30),
+    ],
+
     'crawl' => [
         'url' => env('CRAWL_SERVICE_URL', 'http://crawl-api:8000'),
         'timeout' => (int) env('CRAWL_SERVICE_TIMEOUT', 10),

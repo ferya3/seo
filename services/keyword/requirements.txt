@@ -1,0 +1,5 @@
+# سرویس Keyword — علاوه بر وابستگی‌های موتور در services/engine/requirements.txt
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pika>=1.3
+jsonschema>=4.21

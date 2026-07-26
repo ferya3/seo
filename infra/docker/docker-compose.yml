@@ -122,6 +122,42 @@ services:
       rabbitmq: {condition: service_healthy}
     restart: on-failure
 
+  keyword-api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/keyword.Dockerfile
+    command: ["uvicorn", "services.keyword.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      KEYWORD_DATA_DIR: /var/lib/seoagent/keywords
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+    ports: ["127.0.0.1:8002:8000"]
+    volumes:
+      - keyword-data:/var/lib/seoagent/keywords
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  keyword-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/keyword.Dockerfile
+    command: ["python", "-m", "services.keyword.worker"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      KEYWORD_DATA_DIR: /var/lib/seoagent/keywords
+    volumes:
+      # Shares the store with the API so a bus-triggered run is readable over HTTP.
+      - keyword-data:/var/lib/seoagent/keywords
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: on-failure
+
 volumes:
   postgres-data:
   redis-data:
@@ -130,3 +166,4 @@ volumes:
   meili-data:
   minio-data:
   crawl-data:
+  keyword-data:
