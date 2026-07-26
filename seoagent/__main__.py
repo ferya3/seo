@@ -153,9 +153,13 @@ def main(argv: list[str] | None = None) -> int:
     keywords.add_argument("-o", "--out", help="نوشتن در فایل")
     keywords.set_defaults(func=_keywords)
 
-    args = parser.parse_args(argv)
-    if not getattr(args, "func", None):
-        args = parser.parse_args(["serve", *(argv or [])])
+    # `serve` is the default subcommand, so bare flags like `--host 0.0.0.0`
+    # have to be routed to it before argparse rejects them as unrecognised.
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    if not tokens or tokens[0] not in subparsers.choices:
+        tokens = ["serve", *tokens]
+
+    args = parser.parse_args(tokens)
     return args.func(args)
 
 

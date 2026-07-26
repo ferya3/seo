@@ -37,6 +37,61 @@ python3 -m venv .venv
 
 ---
 
+## نصب روی سرور مجازی
+
+روی اوبونتو/دبیان، یک دستور:
+
+```bash
+sudo apt update && sudo apt install -y git python3-venv && git clone -b claude/personal-seo-agent-3n2suc https://github.com/ferya3/seo.git ~/seo && cd ~/seo && ./run.sh --host 127.0.0.1 --port 5000 --no-open
+```
+
+> ⚠️ **داشبورد هیچ رمز و احرازهویتی ندارد.** اگر با `--host 0.0.0.0` روی یک سرور عمومی
+> بالا بیاوری، هر کسی که آی‌پی سرور را داشته باشد می‌تواند ازش استفاده کند و با آن هر
+> سایتی را بخزد — یعنی پهنای باند و آی‌پی تو خرج کار دیگران می‌شود. به همین دلیل دستور
+> بالا روی `127.0.0.1` بایند می‌کند.
+
+### دسترسی امن از لپ‌تاپ خودت (پیشنهادی)
+
+سرویس را روی لوکال‌هاست سرور نگه دار و از تونل SSH استفاده کن:
+
+```bash
+ssh -N -L 5000:127.0.0.1:5000 user@your-server
+```
+
+بعد در مرورگر خودت `http://127.0.0.1:5000` را باز کن. هیچ پورتی روی اینترنت باز نمی‌شود.
+
+### اجرای دائمی با systemd
+
+تا با بستن SSH خاموش نشود:
+
+```bash
+sudo tee /etc/systemd/system/seoagent.service >/dev/null <<EOF
+[Unit]
+Description=SEO Agent
+After=network.target
+
+[Service]
+User=$USER
+WorkingDirectory=$HOME/seo
+ExecStart=$HOME/seo/.venv/bin/python -m seoagent serve --host 127.0.0.1 --port 5000 --no-open
+Restart=on-failure
+# اگر لایه هوش مصنوعی را می‌خواهی:
+# Environment="ANTHROPIC_API_KEY=sk-ant-..."
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl enable --now seoagent
+```
+
+بررسی وضعیت: `systemctl status seoagent` — لاگ: `journalctl -u seoagent -f`
+
+> اگر حتماً می‌خواهی مستقیم از اینترنت در دسترس باشد، جلوش یک Nginx با HTTPS و
+> احرازهویت پایه (`auth_basic`) بگذار. سرور توسعه‌ی Flask برای قرار گرفتن مستقیم روی
+> اینترنت ساخته نشده است.
+
+---
+
 ## داشبورد
 
 دو تب دارد.
