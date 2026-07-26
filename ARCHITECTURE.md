@@ -12,13 +12,13 @@
 | قراردادها (`shared/contracts`) | ✅ کار می‌کند | envelope + ۵ رویداد، با اعتبارسنجی JSON Schema |
 | باس رویداد (`shared/events`) | ✅ کار می‌کند، روی RabbitMQ 3.12 واقعی تست شد | publisher/consumer با publisher confirms؛ مسیر dead-letter هم اجرا شد: هندلری که خطا داد دقیقاً یک‌بار صدا زده شد و پیام در `.dlq` نشست، نه در حلقه‌ی بی‌نهایت |
 | ذخیره‌سازی فایلی (`shared/store.py`) | ✅ کار می‌کند | `FileJobStore` عمومی — حالت بدون دیتابیس، همان چیزی که نصب تک‌ماشینه استفاده می‌کند |
-| ذخیره‌سازی Postgres + outbox (`shared/db.py`) | ✅ کار می‌کند، ۲۶ تست روی Postgres 16 واقعی | همان اینترفیس `FileJobStore`، به‌علاوه نوشتن وضعیت و رویداد در **یک تراکنش** |
+| ذخیره‌سازی Postgres + outbox (`shared/db.py`) | ✅ کار می‌کند، ۲۷ تست روی Postgres 16 واقعی | همان اینترفیس `FileJobStore`، به‌علاوه نوشتن وضعیت و رویداد در **یک تراکنش** |
 | رله outbox (`shared/relay.py`) | ✅ کار می‌کند، مسیر کامل روی Postgres + RabbitMQ واقعی اجرا شد | outbox → بروکر → مصرف‌کننده؛ `event_id` استیج‌شده تا انتهای مسیر همان می‌ماند |
 | سرویس Crawl (`services/crawl`) | ✅ کار می‌کند، ۲۱ تست | API با FastAPI + ورکر باس، هر دو روی یک `run_crawl` |
 | سرویس Keyword (`services/keyword`) | ✅ کار می‌کند، ۲۳ تست | API با FastAPI + ورکر باس، هر دو روی یک `run_research` |
 | اسکیمای دیتابیس (`infra/db`) | ✅ روی Postgres 16 واقعی اجرا شد | هر دو مهاجرت روی دیتابیس خالی از صفر اعمال شدند، بدون خطا |
 | docker-compose | ⚠️ نوشته شده، اجرا نشده | Postgres، Redis، RabbitMQ، Qdrant، Meilisearch، MinIO + سرویس‌های ما (اینجا داکر دیمن نبود) |
-| API Gateway (`apps/api-gateway`) | ⚠️ داربست + کلاینت | Laravel 13 نصب شد ولی `vendor/` در این محیط ساخته نشد (composer به github دسترسی نداشت). کلاینت و کنترلر هر دو سرویس نوشته شده ولی کد PHP فقط `php -l` شده — **اجرا و تست نشده** |
+| API Gateway (`apps/api-gateway`) | ✅ کار می‌کند، ۴۱ تست | Laravel 13 روی PHP 8.4؛ Sanctum، تنانسی از توکن، rate limit، ترجمه‌ی خطای سرویس‌ها. سرتاسری هم اجرا شد: توکن → گیت‌وی → سرویس Keyword → Postgres |
 | بقیه سرویس‌ها و ایجنت‌ها | ❌ شروع نشده | SERP، Content، Optimizer، Internal Links، Competitor، Rank، GSC، Orchestrator |
 | Frontend (Nuxt) | ❌ شروع نشده | داشبورد فعلی همان Flask داخل موتور است |
 | k8s / terraform / monitoring | ❌ شروع نشده | |
@@ -41,7 +41,7 @@
 بدون دیتابیس، تست‌های Postgres skip می‌شوند و بقیه کار می‌کنند:
 
 ```bash
-pytest                       # ۲۰۰ تست، ۲۶ skip
+pytest                       # ۲۰۱ تست، ۲۶ skip
 ```
 
 با دیتابیس واقعی:
@@ -50,7 +50,7 @@ pytest                       # ۲۰۰ تست، ۲۶ skip
 createdb seo
 psql -d seo -f infra/db/migrations/0001_core.sql
 psql -d seo -f infra/db/migrations/0002_research.sql
-TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo pytest    # ۲۲۶ تست
+TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo pytest    # ۲۲۷ تست
 ```
 
 `shared/tests` عمداً با فیک اجرا نمی‌شود: ارزش این ذخیره‌ساز اتمی بودن تراکنش
@@ -110,16 +110,46 @@ idempotent است. پیام خراب به DLQ می‌رود نه اینکه بی
 مصرف‌کننده رسیدند و معلوم نبود کدام سرویس آن‌ها را ساخته. حالا سرویس سازنده در
 جدول می‌نشیند و رله فقط حملش می‌کند.
 
+**گیت‌وی خطای سرویس را ترجمه می‌کند، پنهان نمی‌کند.** سرویس در دسترس نیست →
+۵۰۳ (قابل تلاش مجدد)، ورودی بد → ۴۲۲ با **متن خود سرویس**، رکورد ناموجود →
+۴۰۴. نسخه‌ی اول این کد از `PendingRequest::throw()` استفاده می‌کرد که شبیه همین
+به نظر می‌رسد و نیست: روی هر پاسخ خطا throw می‌کند (پس `if (status === 404)`
+زیرش کد مرده بود) و برای `ConnectionException` اصلاً صدا زده نمی‌شود. نتیجه
+این بود که **هر خطای پایین‌دستی به ۵۰۰ تبدیل می‌شد**. `php -l` این را نمی‌بیند؛
+فقط اجرا کردنش دید.
+
+**تنانت ناشناخته، خطای ۵۰۰ نیست.** گیت‌وی `tenant_id` را از توکن می‌گیرد و
+جلو می‌فرستد، ولی دیتابیس سرویس‌ها ممکن است آن تنانت را نشناسد. کلید خارجی
+درست کار می‌کند و جلویش را می‌گیرد — ولی قبلاً به‌صورت ۵۰۰ بیرون می‌آمد، یعنی
+«ما خرابیم» به کسی که خودش به جای خالی اشاره کرده بود. حالا
+`ForeignKeyViolation` به `UnknownTenant` و بعد به ۴۰۰ سرویس و ۴۲۲ گیت‌وی
+تبدیل می‌شود. ساختن خود تنانت کار سرویس Auth است که هنوز نوشته نشده.
+
 **بازگشت به فایل، بی‌صدا نیست.** اگر `DATABASE_URL` ست باشد ولی دیتابیس در
 دسترس نباشد، سرویس بالا می‌آید و روی فایل کار می‌کند — ولی با لاگ سطح خطا.
 نصب تک‌ماشینه‌ی توی README دیتابیس ندارد و باید کار کند؛ ولی از دست دادن
 بی‌صدای outbox خیلی بدتر از از دست دادن پرصدایش است.
 
+## اجرای گیت‌وی
+
+```bash
+cd apps/api-gateway
+composer install
+cp .env.example .env && php artisan key:generate
+touch database/database.sqlite && php artisan migrate
+php artisan test                       # ۴۱ تست
+KEYWORD_SERVICE_URL=http://127.0.0.1:8102 php artisan serve
+```
+
+توکن با `php artisan tinker` ساخته می‌شود: `$user->createToken('name')->plainTextToken`.
+تنانت باید در جدول `tenants` دیتابیس سرویس‌ها وجود داشته باشد وگرنه ۴۲۲
+می‌گیری — تا وقتی سرویس Auth ساخته شود، دستی اضافه‌اش کن.
+
 ## قدم بعدی
 
-۱. `composer install` روی ماشینی با دسترسی GitHub، و تست واقعی Gateway —
-   تنها بخش معماری که هنوز هیچ‌وقت اجرا نشده
-۲. بالا آوردن docker-compose به‌صورت کامل (اینجا داکر دیمن نبود؛ سرویس‌ها
-   تک‌تک روی Postgres و RabbitMQ واقعی اجرا شدند، ولی نه از طریق compose)
+۱. سرویس Auth/Project — الان تنها حلقه‌ی گم‌شده‌ی زنجیره است: گیت‌وی کاربر و
+   توکن دارد، سرویس‌ها جدول `tenants` دارند، ولی هیچ‌کس تنانت را نمی‌سازد
+۲. بالا آوردن docker-compose به‌صورت کامل (اینجا داکر دیمن نبود؛ همه‌ی
+   اجزا تک‌تک روی Postgres و RabbitMQ واقعی اجرا شدند، ولی نه از طریق compose)
 ۳. سرویس بعدی: SERP
 ۴. Orchestrator و ایجنت‌ها

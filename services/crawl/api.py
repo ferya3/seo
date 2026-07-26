@@ -36,6 +36,7 @@ from seoagent.report import build_report  # noqa: E402
 from seoagent.rules import run_all  # noqa: E402
 
 from shared.contracts import ContractError, validate_event  # noqa: E402
+from shared.db import UnknownTenant  # noqa: E402
 from shared.events import Envelope, Publisher  # noqa: E402
 from shared.store import PendingEvent  # noqa: E402
 
@@ -113,7 +114,12 @@ def create_crawl(request: CrawlRequest, background: BackgroundTasks) -> CrawlAcc
         raise HTTPException(400, f"invalid url: {exc}") from exc
 
     crawl_id = str(uuid.uuid4())
-    store.create(crawl_id, url, tenant_id=request.tenant_id, project_id=request.project_id)
+    try:
+        store.create(crawl_id, url, tenant_id=request.tenant_id, project_id=request.project_id)
+    except UnknownTenant as exc:
+        # The caller named a tenant this database has never seen. Their
+        # problem, not ours — 400 keeps the gateway from reporting an outage.
+        raise HTTPException(400, str(exc)) from exc
     payload = request.model_dump()
     payload["start_url"] = url
     background.add_task(

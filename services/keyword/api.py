@@ -30,6 +30,7 @@ from seoagent.config import KeywordConfig  # noqa: E402
 from seoagent.keywords.research import research  # noqa: E402
 
 from shared.contracts import ContractError, validate_event  # noqa: E402
+from shared.db import UnknownTenant  # noqa: E402
 from shared.events import Envelope, Publisher  # noqa: E402
 from shared.store import PendingEvent  # noqa: E402
 
@@ -99,7 +100,12 @@ def create_research(request: ResearchRequest, background: BackgroundTasks) -> Re
         raise HTTPException(422, "seed must not be blank")
 
     research_id = str(uuid.uuid4())
-    store.create(research_id, seed, tenant_id=request.tenant_id, project_id=request.project_id)
+    try:
+        store.create(research_id, seed, tenant_id=request.tenant_id, project_id=request.project_id)
+    except UnknownTenant as exc:
+        # The caller named a tenant this database has never seen. Their
+        # problem, not ours — 400 keeps the gateway from reporting an outage.
+        raise HTTPException(400, str(exc)) from exc
     payload = request.model_dump()
     payload["seed"] = seed
     background.add_task(

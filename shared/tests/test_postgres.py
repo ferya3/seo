@@ -18,7 +18,7 @@ import uuid
 import pytest
 
 from shared import relay
-from shared.db import DatabaseUnavailable, PostgresJobStore, store_for
+from shared.db import DatabaseUnavailable, PostgresJobStore, UnknownTenant, store_for
 from shared.store import FileJobStore, PendingEvent
 
 psycopg = pytest.importorskip("psycopg")
@@ -158,6 +158,16 @@ def test_an_unknown_column_is_refused_not_interpolated(crawls):
     crawls.create(crawl_id, "https://example.com")
     with pytest.raises(KeyError):
         crawls.update(crawl_id, **{"status = 'x' --": "boom"})
+
+
+def test_an_unprovisioned_tenant_is_the_callers_fault(crawls):
+    """Found by running the gateway against a real service: the gateway happily
+    forwards a tenant id its own user table knows about, which the services'
+    database has never heard of. The foreign key is right to refuse — but it
+    surfaced as a 500, telling the caller we were broken when they were the
+    ones pointing at nothing. Tenants are the auth service's to provision."""
+    with pytest.raises(UnknownTenant):
+        crawls.create(str(uuid.uuid4()), "https://example.com", tenant_id=str(uuid.uuid4()))
 
 
 def test_creating_the_same_id_twice_is_harmless(crawls):

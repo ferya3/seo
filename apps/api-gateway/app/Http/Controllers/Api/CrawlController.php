@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\CrawlRequestRejected;
+use App\Services\RequestRejected;
 use App\Services\CrawlServiceClient;
-use App\Services\CrawlServiceUnavailable;
+use App\Services\ServiceUnavailable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -47,9 +47,9 @@ final class CrawlController extends Controller
 
         try {
             $accepted = $this->crawls->start($validated['start_url'], $validated);
-        } catch (CrawlRequestRejected $e) {
+        } catch (RequestRejected $e) {
             return response()->json(['error' => $e->getMessage()], 422);
-        } catch (CrawlServiceUnavailable $e) {
+        } catch (ServiceUnavailable) {
             return response()->json(['error' => 'crawl service unavailable'], 503);
         }
 
@@ -60,7 +60,7 @@ final class CrawlController extends Controller
     {
         try {
             $crawl = $this->crawls->get($crawlId);
-        } catch (CrawlServiceUnavailable) {
+        } catch (ServiceUnavailable) {
             return response()->json(['error' => 'crawl service unavailable'], 503);
         }
 
@@ -75,7 +75,7 @@ final class CrawlController extends Controller
     {
         try {
             $crawls = $this->crawls->recent((int) $request->query('limit', '25'));
-        } catch (CrawlServiceUnavailable) {
+        } catch (ServiceUnavailable) {
             return response()->json(['error' => 'crawl service unavailable'], 503);
         }
 

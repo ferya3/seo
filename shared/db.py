@@ -34,6 +34,18 @@ class DatabaseUnavailable(RuntimeError):
     """DATABASE_URL is set but the driver or the server is not reachable."""
 
 
+class UnknownTenant(ValueError):
+    """The job referenced a tenant or project that does not exist.
+
+    Not a server fault: the caller named something real-looking that this
+    database has never heard of. Tenants are provisioned by the auth/project
+    service, so until that has created the row, work for it cannot be stored.
+    Surfaced separately from other errors so the API can answer 400 instead of
+    500 — a 500 would tell the caller we are broken when they are the ones
+    pointing at nothing.
+    """
+
+
 def _psycopg():
     try:
         import psycopg
@@ -118,13 +130,19 @@ class PostgresJobStore(Generic[R]):
         project_id: str | None = None,
         **extra: Any,
     ) -> R:
-        with self.pool.connection() as conn:
-            conn.execute(
-                f"INSERT INTO {self.table.name} "
-                f"(id, tenant_id, project_id, {self.table.subject_column}, status) "
-                f"VALUES (%s, %s, %s, %s, 'queued') ON CONFLICT (id) DO NOTHING",
-                (job_id, tenant_id, project_id, subject),
-            )
+        psycopg, _ = _psycopg()
+        try:
+            with self.pool.connection() as conn:
+                conn.execute(
+                    f"INSERT INTO {self.table.name} "
+                    f"(id, tenant_id, project_id, {self.table.subject_column}, status) "
+                    f"VALUES (%s, %s, %s, %s, 'queued') ON CONFLICT (id) DO NOTHING",
+                    (job_id, tenant_id, project_id, subject),
+                )
+        except psycopg.errors.ForeignKeyViolation as exc:
+            raise UnknownTenant(
+                f"unknown tenant_id {tenant_id!r} or project_id {project_id!r}"
+            ) from exc
         return self.record_cls(
             job_id=job_id, subject=subject, tenant_id=tenant_id, project_id=project_id, **extra
         )

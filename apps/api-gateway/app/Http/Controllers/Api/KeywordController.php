@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\CrawlRequestRejected;
-use App\Services\CrawlServiceUnavailable;
+use App\Services\RequestRejected;
+use App\Services\ServiceUnavailable;
 use App\Services\KeywordServiceClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,9 +42,9 @@ final class KeywordController extends Controller
 
         try {
             $accepted = $this->keywords->start($validated['seed'], $validated);
-        } catch (CrawlRequestRejected $e) {
+        } catch (RequestRejected $e) {
             return response()->json(['error' => $e->getMessage()], 422);
-        } catch (CrawlServiceUnavailable) {
+        } catch (ServiceUnavailable) {
             return response()->json(['error' => 'keyword service unavailable'], 503);
         }
 
@@ -55,7 +55,7 @@ final class KeywordController extends Controller
     {
         try {
             $research = $this->keywords->get($researchId);
-        } catch (CrawlServiceUnavailable) {
+        } catch (ServiceUnavailable) {
             return response()->json(['error' => 'keyword service unavailable'], 503);
         }
 
@@ -70,7 +70,7 @@ final class KeywordController extends Controller
     {
         try {
             $research = $this->keywords->recent((int) $request->query('limit', '25'));
-        } catch (CrawlServiceUnavailable) {
+        } catch (ServiceUnavailable) {
             return response()->json(['error' => 'keyword service unavailable'], 503);
         }
 
