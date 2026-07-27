@@ -22,6 +22,13 @@ interface Report {
   }
   crawl?: Record<string, unknown>
   keywords?: Record<string, unknown>
+  optimizer?: {
+    pages_with_fixes?: number
+    fixes?: number
+    written_by?: 'rules' | 'ai'
+    pages?: { url: string, fixes: number }[]
+    result_url?: string
+  }
   content?: {
     keywords?: number
     covered?: number
@@ -102,6 +109,7 @@ const tiles = computed(() => {
     { name: 'میانگین جایگاه', value: headline.average_position },
     { name: 'صفحه‌ی یتیم', value: headline.orphan_pages },
     { name: 'پوشش کلمات (٪)', value: headline.keyword_coverage },
+    { name: 'صفحه برای بازنویسی', value: headline.pages_to_rewrite },
   ]
 })
 </script>
@@ -194,6 +202,31 @@ const tiles = computed(() => {
               <td>{{ item.keyword }}</td>
               <td class="muted">{{ positionLabel(item.position) }}</td>
               <td>{{ item.opportunity }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section v-if="report?.optimizer?.pages_with_fixes" class="panel">
+        <h2>
+          پیشنهاد بازنویسی
+          <span class="pill">
+            {{ report.optimizer.written_by === 'ai' ? 'متن آماده' : 'دستورالعمل' }}
+          </span>
+        </h2>
+        <p class="lede">
+          {{ report.optimizer.fixes }} اصلاح مشخص روی
+          {{ report.optimizer.pages_with_fixes }} صفحه. متن کامل هر پیشنهاد در
+          خود سرویس بهینه‌سازی است.
+        </p>
+        <table>
+          <thead>
+            <tr><th>صفحه</th><th>تعداد اصلاح</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in report.optimizer.pages" :key="row.url">
+              <td class="ltr">{{ row.url }}</td>
+              <td>{{ row.fixes }}</td>
             </tr>
           </tbody>
         </table>

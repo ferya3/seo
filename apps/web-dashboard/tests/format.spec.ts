@@ -56,6 +56,7 @@ describe('labels', () => {
     expect(stepLabel('serp_check')).toBe('بررسی جایگاه')
     expect(stepLabel('link_analysis')).toBe('تحلیل لینک داخلی')
     expect(stepLabel('content_analysis')).toBe('پوشش محتوا')
+    expect(stepLabel('optimizer_plan')).toBe('پیشنهاد بازنویسی')
   })
 })
 

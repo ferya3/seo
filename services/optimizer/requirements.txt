@@ -1,0 +1,13 @@
+# سرویس Optimizer — پیشنهاد بازنویسی
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pika>=1.3
+jsonschema>=4.21
+# برای خواندن گزارش خزش و تحقیق از سرویس‌های خودمان
+requests>=2.32
+
+# ذخیره‌سازی روی Postgres. اختیاری: بدون DATABASE_URL سرویس روی فایل کار می‌کند.
+psycopg[binary,pool]>=3.2
+
+# اختیاری — فقط برای نوشتن متن پیشنهادی. بدون آن، طرح دستورالعمل می‌ماند.
+# pip install anthropic

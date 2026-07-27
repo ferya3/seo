@@ -83,6 +83,9 @@ class WorkflowInputs(BaseModel):
     # How many researched keywords to rank-check. Each one is a live search
     # request, so the ceiling is a rate-limit decision.
     track_keywords: int | None = Field(default=None, ge=1, le=planner.MAX_TRACKED)
+    # How many pages the rewrite plan covers. Bounded for the same reason:
+    # every page is model tokens and work someone has to do.
+    optimize_pages: int | None = Field(default=None, ge=1, le=planner.MAX_OPTIMIZED)
     lang: str = "fa"
     country: str = "IR"
 

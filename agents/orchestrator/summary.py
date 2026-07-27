@@ -33,6 +33,7 @@ STEP_FA = {
     "serp_check": "بررسی جایگاه",
     "link_analysis": "تحلیل لینک داخلی",
     "content_analysis": "پوشش محتوا",
+    "optimizer_plan": "پیشنهاد بازنویسی",
 }
 
 SUMMARY_SCHEMA = {
@@ -146,6 +147,13 @@ def _sentences(report, headline, rankings) -> list[str]:
             out.append(
                 f"روی {content['cannibalisation_count']} عبارت، چند صفحه با هم رقابت می‌کنند."
             )
+
+    plan = report.get("optimizer") or {}
+    if plan.get("pages_with_fixes"):
+        piece = (f"برای {plan['pages_with_fixes']} صفحه {plan.get('fixes', 0)} اصلاح "
+                 "مشخص پیشنهاد شده")
+        piece += " با متن آماده" if plan.get("written_by") == "ai" else " به‌صورت دستورالعمل"
+        out.append(piece + ".")
 
     competitors = [c.get("domain") for c in (rankings.get("top_competitors") or [])[:3]]
     if competitors:

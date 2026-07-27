@@ -45,6 +45,10 @@ def _site_audit(inputs: dict[str, Any]) -> list[Step]:
     can be filled in from what the crawl found, and the rank check has nothing
     to check until research has produced keywords.
 
+    The rewrite plan is last because it is the only step that proposes rather
+    than reports: it is worth the most when everything before it has already
+    said what is wrong.
+
     The link analysis comes fourth rather than second, even though it only
     needs the crawl. Ordering it late costs nothing — it is arithmetic over
     data already gathered — and keeps the expensive network steps starting as
@@ -80,6 +84,9 @@ def _site_audit(inputs: dict[str, Any]) -> list[Step]:
         }),
         Step(position=4, kind="link_analysis", params={}),
         Step(position=5, kind="content_analysis", params={}),
+        Step(position=6, kind="optimizer_plan", params={
+            "pages": int(inputs.get("optimize_pages") or DEFAULT_OPTIMIZED),
+        }),
     ]
 
 
@@ -87,6 +94,11 @@ def _site_audit(inputs: dict[str, Any]) -> list[Step]:
 # search request against a host that will start refusing if pushed, so this is
 # a rate-limit decision as much as a useful-report decision.
 DEFAULT_TRACKED = 10
+
+# How many pages the rewrite plan covers. Bounded for the same reason: each one
+# is model tokens, and more to the point it is work a person has to do.
+DEFAULT_OPTIMIZED = 5
+MAX_OPTIMIZED = 25
 MAX_TRACKED = 50
 
 

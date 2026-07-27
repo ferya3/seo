@@ -40,6 +40,7 @@ COMPLETIONS = {
     "serp.checked": ("serp_check", "check_id"),
     "links.analyzed": ("link_analysis", "analysis_id"),
     "content.analyzed": ("content_analysis", "analysis_id"),
+    "optimizer.planned": ("optimizer_plan", "plan_id"),
 }
 
 
@@ -152,6 +153,9 @@ def _dispatch_event(workflow: Workflow, step) -> PendingEvent:
     elif step.kind == "content_analysis":
         event_type = "content.analysis_requested"
         payload = {"analysis_id": step.job_id, **_content_params(workflow)}
+    elif step.kind == "optimizer_plan":
+        event_type = "optimizer.plan_requested"
+        payload = {"plan_id": step.job_id, **_optimizer_params(workflow)}
     else:                                             # pragma: no cover - guarded by the schema
         raise ValueError(f"unknown step kind {step.kind!r}")
 
@@ -252,6 +256,31 @@ def _content_params(workflow: Workflow) -> dict[str, Any]:
     return {"crawl_id": crawl_id, "research_id": research_id}
 
 
+def _optimizer_params(workflow: Workflow) -> dict[str, Any]:
+    """The crawl is required; the keyword study is not.
+
+    Length and structure fixes do not need a target keyword, so a site whose
+    research came back empty still gets a usable plan — the alternative would
+    be skipping the only step that proposes anything.
+    """
+    crawl = next((s.result for s in workflow.steps if s.kind == "crawl" and s.result), None)
+    research = next(
+        (s.result for s in workflow.steps if s.kind == "keyword_research" and s.result), None
+    )
+    crawl_id = (crawl or {}).get("crawl_id")
+    if not crawl_id:
+        raise NoWorkToDo("no crawl to optimise")
+
+    params: dict[str, Any] = {
+        "crawl_id": crawl_id,
+        "pages": int(workflow.inputs.get("optimize_pages") or planner.DEFAULT_OPTIMIZED),
+    }
+    research_id = (research or {}).get("research_id")
+    if research_id:
+        params["research_id"] = research_id
+    return params
+
+
 class NoWorkToDo(Exception):
     """A step has nothing to act on. The workflow finishes, it does not fail."""
 
@@ -314,6 +343,7 @@ def _report(
     serp = result_of("serp_check")
     links = result_of("link_analysis")
     content = result_of("content_analysis")
+    plan = result_of("optimizer_plan")
 
     report = {
         "goal": workflow.goal,
@@ -328,12 +358,14 @@ def _report(
             "average_position": serp.get("average_position"),
             "orphan_pages": links.get("orphan_count"),
             "keyword_coverage": content.get("coverage"),
+            "pages_to_rewrite": plan.get("pages_with_fixes"),
         },
         "crawl": crawl,
         "keywords": research,
         "rankings": serp,
         "links": links,
         "content": content,
+        "optimizer": plan,
     }
     # The deterministic summary only — this runs while the workflow row is
     # locked, so it may not touch the network. The model-written one replaces
@@ -364,6 +396,17 @@ def _step_result(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             # Kept rather than trimmed to a headline: the next step reads this
             # to decide what to rank-check.
             "top_keywords": payload.get("top_keywords", [])[:25],
+            "result_url": payload.get("result_url"),
+        }
+    if kind == "optimizer_plan":
+        return {
+            "plan_id": payload.get("plan_id"),
+            "crawl_id": payload.get("crawl_id"),
+            "pages_examined": payload.get("pages_examined"),
+            "pages_with_fixes": payload.get("pages_with_fixes"),
+            "fixes": payload.get("fixes"),
+            "written_by": payload.get("written_by"),
+            "pages": payload.get("pages", [])[:10],
             "result_url": payload.get("result_url"),
         }
     if kind == "content_analysis":

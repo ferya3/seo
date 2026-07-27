@@ -54,6 +54,12 @@
           "minimum": 1,
           "maximum": 50,
           "description": "How many researched keywords to rank-check. Each is a live search request."
+        },
+        "optimize_pages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25,
+          "description": "How many pages the rewrite plan covers."
         }
       },
       "additionalProperties": false

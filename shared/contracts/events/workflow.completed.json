@@ -53,7 +53,8 @@
               "keyword_research",
               "serp_check",
               "link_analysis",
-              "content_analysis"
+              "content_analysis",
+              "optimizer_plan"
             ]
           },
           "job_id": {
@@ -127,6 +128,12 @@
         "keyword_coverage": {
           "type": [
             "number",
+            "null"
+          ]
+        },
+        "pages_to_rewrite": {
+          "type": [
+            "integer",
             "null"
           ]
         }

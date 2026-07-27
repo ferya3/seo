@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/optimizer.planned.json",
+  "title": "optimizer.planned",
+  "description": "A rewrite plan is ready. Carries counts and which pages it covers; the proposed copy itself stays behind the result url.",
+  "type": "object",
+  "required": ["plan_id", "crawl_id", "status", "result_url"],
+  "additionalProperties": false,
+  "properties": {
+    "plan_id": {"type": "string", "format": "uuid"},
+    "crawl_id": {"type": "string"},
+    "status": {"enum": ["completed", "failed"]},
+    "error": {"type": ["string", "null"]},
+    "pages_examined": {"type": "integer", "minimum": 0},
+    "pages_with_fixes": {"type": "integer", "minimum": 0},
+    "fixes": {"type": "integer", "minimum": 0},
+    "written_by": {
+      "enum": ["rules", "ai"],
+      "description": "Whether a model wrote any of the copy, or the plan is instructions only."
+    },
+    "pages": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["url"],
+        "additionalProperties": false,
+        "properties": {
+          "url": {"type": "string"},
+          "fixes": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "result_url": {"type": "string"}
+  }
+}

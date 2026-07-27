@@ -134,15 +134,30 @@ def content_done(job_id: str, status: str = "completed", error: str | None = Non
     }
 
 
-def drive(store, workflow_id, through: int = 5) -> None:
+def plan_done(job_id: str, status: str = "completed", error: str | None = None) -> dict:
+    return {
+        "plan_id": job_id,
+        "crawl_id": "crawl-1",
+        "status": status,
+        "error": error,
+        "pages_examined": 3,
+        "pages_with_fixes": 2,
+        "fixes": 5,
+        "written_by": "rules",
+        "pages": [{"url": "https://example.com/a", "fixes": 3}],
+        "result_url": f"/v1/optimizer-plans/{job_id}",
+    }
+
+
+def drive(store, workflow_id, through: int = 6) -> None:
     """Feed a workflow the completion events for its first `through` steps.
 
     One place that knows the running order, so adding a fifth step later means
     changing this rather than every test that drives a workflow to the end.
     """
     events = ["crawl.completed", "keyword.researched", "serp.checked",
-              "links.analyzed", "content.analyzed"]
-    payloads = [crawl_done, research_done, serp_done, links_done, content_done]
+              "links.analyzed", "content.analyzed", "optimizer.planned"]
+    payloads = [crawl_done, research_done, serp_done, links_done, content_done, plan_done]
 
     for index in range(through):
         step = store.get(workflow_id).step_at(index + 1)
@@ -164,7 +179,7 @@ def test_a_site_audit_crawls_then_researches_then_checks_rankings():
     steps = planner.plan("site_audit", AUDIT)
     assert [(s.position, s.kind) for s in steps] == [
         (1, "crawl"), (2, "keyword_research"), (3, "serp_check"),
-        (4, "link_analysis"), (5, "content_analysis"),
+        (4, "link_analysis"), (5, "content_analysis"), (6, "optimizer_plan"),
     ]
 
 
@@ -205,7 +220,7 @@ def test_starting_dispatches_only_the_first_step(store, conn):
 
     assert workflow.status == "running"
     assert [s.status for s in workflow.steps] == [
-        "dispatched", "pending", "pending", "pending", "pending"
+        "dispatched", "pending", "pending", "pending", "pending", "pending"
     ]
 
     # The second step must not have been asked for yet.
@@ -239,7 +254,7 @@ def test_finishing_a_step_dispatches_the_next(store, conn):
 
     workflow = store.get(workflow_id)
     assert [s.status for s in workflow.steps] == [
-        "completed", "dispatched", "pending", "pending", "pending"
+        "completed", "dispatched", "pending", "pending", "pending", "pending"
     ]
     types = [r[0] for r in conn.execute("SELECT event_type FROM outbox ORDER BY id").fetchall()]
     assert types == ["crawl.requested", "keyword.research_requested"]
@@ -275,7 +290,7 @@ def test_the_last_step_completes_the_workflow(store):
     assert workflow.report["headline"] == {
         "overall_score": 73, "total_issues": 9, "keywords_found": 128,
         "keywords_ranked": 2, "average_position": 3.5, "orphan_pages": 1,
-        "keyword_coverage": 75.0,
+        "keyword_coverage": 75.0, "pages_to_rewrite": 2,
     }
 
 
@@ -288,7 +303,7 @@ def test_completion_emits_a_contract_valid_event(store, conn):
     ).fetchone()[0]
     validate_event("workflow.completed", payload)
     assert payload["status"] == "completed"
-    assert [s["status"] for s in payload["steps"]] == ["completed"] * 5
+    assert [s["status"] for s in payload["steps"]] == ["completed"] * 6
 
 
 def test_the_report_links_to_results_rather_than_copying_them(store):
@@ -461,7 +476,7 @@ def test_the_worker_ignores_a_workflow_it_already_started(store, monkeypatch):
 
     with psycopg.connect(DSN, autocommit=True) as c:
         assert c.execute("SELECT count(*) FROM workflow_steps WHERE workflow_id = %s",
-                         (workflow_id,)).fetchone()[0] == 5
+                         (workflow_id,)).fetchone()[0] == 6
 
 
 def test_the_worker_dead_letters_a_malformed_request(store, monkeypatch):
@@ -491,7 +506,7 @@ def test_the_worker_advances_on_a_completion_event(store, monkeypatch):
     ))
 
     assert [s.status for s in store.get(workflow_id).steps] == [
-        "completed", "dispatched", "pending", "pending", "pending"
+        "completed", "dispatched", "pending", "pending", "pending", "pending"
     ]
 
 
@@ -526,7 +541,8 @@ def test_the_api_runs_a_workflow_end_to_end(store, monkeypatch):
     body = client.get(f"/v1/workflows/{workflow_id}").json()
     assert body["status"] == "running"
     assert [s["kind"] for s in body["steps"]] == [
-        "crawl", "keyword_research", "serp_check", "link_analysis", "content_analysis"
+        "crawl", "keyword_research", "serp_check", "link_analysis", "content_analysis",
+        "optimizer_plan",
     ]
 
     assert any(w["workflow_id"] == workflow_id for w in client.get("/v1/workflows").json())
@@ -607,7 +623,7 @@ def test_research_finding_nothing_skips_the_check_rather_than_failing(store, con
     workflow = store.get(workflow_id)
     assert workflow.status == "completed"
     assert [s.status for s in workflow.steps] == [
-        "completed", "completed", "skipped", "completed", "completed"
+        "completed", "completed", "skipped", "completed", "completed", "completed"
     ]
     # The crawl's findings survive.
     assert workflow.report["headline"]["overall_score"] == 73
@@ -744,7 +760,8 @@ def test_a_failed_workflow_is_summarised_too(store):
 def test_the_report_lists_its_steps(store):
     steps = store.get(finished(store)).report["steps"]
     assert [s["kind"] for s in steps] == [
-        "crawl", "keyword_research", "serp_check", "link_analysis", "content_analysis"
+        "crawl", "keyword_research", "serp_check", "link_analysis", "content_analysis",
+        "optimizer_plan",
     ]
 
 
@@ -999,3 +1016,70 @@ def test_the_summary_names_the_missing_page(store):
     summary = store.get(workflow_id).report["summary"]
     assert "پوشش" in summary["text_fa"]
     assert any("کفش کوهنوردی" in action["action"] for action in summary["next_actions"])
+
+
+# ------------------------------------------------------- the rewrite plan
+
+
+def test_the_optimizer_step_gets_the_crawl_and_the_study(store, conn):
+    workflow_id = started(store)
+    steps = store.get(workflow_id).steps
+    drive(store, workflow_id, through=5)
+
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE event_type='optimizer.plan_requested'"
+    ).fetchone()[0]
+    validate_event("optimizer.plan_requested", payload)
+    assert payload["crawl_id"] == steps[0].job_id
+    assert payload["research_id"] == steps[1].job_id
+    assert payload["pages"] == planner.DEFAULT_OPTIMIZED
+
+
+def test_a_workflow_with_no_keywords_still_asks_for_a_plan(store, conn):
+    """Length and structure fixes do not need a keyword study, and skipping
+    the only step that proposes anything would be the wrong trade."""
+    workflow_id = started(store)
+    steps = store.get(workflow_id).steps
+    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
+
+    empty = research_done(steps[1].job_id)
+    empty["top_keywords"] = []
+    empty["total"] = 0
+    engine.on_completion(store, "keyword.researched", empty)
+    drive(store, workflow_id)
+
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE event_type='optimizer.plan_requested'"
+    ).fetchone()[0]
+    assert payload["crawl_id"] == steps[0].job_id
+    assert store.get(workflow_id).step_at(6).status == "completed"
+
+
+def test_the_page_budget_reaches_the_plan(store, conn, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from agents.orchestrator import api
+
+    monkeypatch.setattr(api, "_store", store)
+    client = TestClient(api.app)
+
+    workflow_id = client.post("/v1/workflows", json={
+        "goal": "site_audit",
+        "inputs": {"start_url": "https://example.com", "seed": "کفش", "optimize_pages": 2},
+    }).json()["workflow_id"]
+    drive(store, workflow_id, through=5)
+
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE event_type='optimizer.plan_requested'"
+    ).fetchone()[0]
+    assert payload["pages"] == 2
+
+
+def test_the_rewrite_plan_reaches_the_final_report(store):
+    workflow_id = started(store)
+    drive(store, workflow_id)
+
+    report = store.get(workflow_id).report
+    assert report["optimizer"]["pages_with_fixes"] == 2
+    assert report["headline"]["pages_to_rewrite"] == 2
+    assert "پیشنهاد" in report["summary"]["text_fa"] or "اصلاح" in report["summary"]["text_fa"]

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/optimizer.plan_requested.json",
+  "title": "optimizer.plan_requested",
+  "description": "Propose rewrites for the pages of a finished crawl. Published by the gateway or the orchestrator; consumed by the optimizer, which fetches the crawl (and the keyword study, if there is one) itself.",
+  "type": "object",
+  "required": ["crawl_id"],
+  "additionalProperties": false,
+  "properties": {
+    "plan_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Allocated by the caller so the result url is known before the work starts."
+    },
+    "crawl_id": {"type": "string", "format": "uuid"},
+    "research_id": {
+      "type": ["string", "null"],
+      "description": "Optional: length and structure fixes do not need a keyword study."
+    },
+    "pages": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 25,
+      "description": "How many pages the plan covers. Each one is model tokens and work someone has to do."
+    }
+  }
+}

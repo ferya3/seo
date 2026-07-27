@@ -27,6 +27,7 @@ const STEP_FA: Record<string, string> = {
   serp_check: 'بررسی جایگاه',
   link_analysis: 'تحلیل لینک داخلی',
   content_analysis: 'پوشش محتوا',
+  optimizer_plan: 'پیشنهاد بازنویسی',
 }
 
 export function statusLabel(status: string): string {
