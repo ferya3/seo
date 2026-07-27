@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/report.rendered.json",
+  "title": "report.rendered",
+  "description": "A document is ready. Carries where it is and what it covers, never the document — an HTML report is tens of kilobytes and a message bus is not a file server.",
+  "type": "object",
+  "required": ["report_id", "workflow_id", "status", "result_url"],
+  "additionalProperties": false,
+  "properties": {
+    "report_id": {"type": "string", "format": "uuid"},
+    "workflow_id": {"type": "string"},
+    "status": {"enum": ["completed", "failed"]},
+    "error": {"type": ["string", "null"]},
+    "title": {"type": ["string", "null"]},
+    "summary_source": {
+      "enum": ["rules", "ai"],
+      "description": "Which summary the document captured. A report rendered the moment a workflow finishes can hold the rule one while the model's is still being written."
+    },
+    "formats": {
+      "type": "array",
+      "items": {"enum": ["html", "md"]}
+    },
+    "result_url": {"type": "string"},
+    "document_url": {"type": "string"}
+  }
+}

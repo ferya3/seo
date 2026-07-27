@@ -1,0 +1,10 @@
+# سرویس Reporting — ساخت سند نهایی
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pika>=1.3
+jsonschema>=4.21
+# برای خواندن گردش‌کار از ارکستریتور
+requests>=2.32
+
+# ذخیره‌سازی روی Postgres. اختیاری: بدون DATABASE_URL سرویس روی فایل کار می‌کند.
+psycopg[binary,pool]>=3.2

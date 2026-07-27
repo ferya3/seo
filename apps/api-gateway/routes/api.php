@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CrawlController;
 use App\Http\Controllers\Api\KeywordController;
 use App\Http\Controllers\Api\ProjectController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SerpController;
 use App\Http\Controllers\Api\WorkflowController;
 use Illuminate\Support\Facades\Route;
@@ -49,6 +50,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->prefix('v1')->group(functio
     Route::post('/checks', [SerpController::class, 'store'])->middleware('throttle:crawls');
     Route::get('/checks', [SerpController::class, 'index']);
     Route::get('/checks/{check}', [SerpController::class, 'show']);
+
+    // Rendering a document is cheap and read-only: the general budget.
+    Route::post('/reports', [ReportController::class, 'store']);
+    Route::get('/reports', [ReportController::class, 'index']);
+    Route::get('/reports/{report}', [ReportController::class, 'show']);
+    Route::get('/reports/{report}/document', [ReportController::class, 'document']);
 
     // A workflow starts a crawl and a keyword study, so it shares the tighter
     // budget rather than the general one.

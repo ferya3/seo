@@ -38,9 +38,13 @@ def fetch_report(
     path: str,
     tenant_id: str | None = None,
     timeout: float = 30.0,
-    key: str = "report",
+    key: str | None = "report",
 ) -> dict[str, Any]:
-    """GET `path` from `base_url` and return the report inside it."""
+    """GET `path` from `base_url` and return the report inside it.
+
+    `key=None` returns the whole body. A document needs a job's status, inputs
+    and steps as much as its findings, and those sit at the top level.
+    """
     url = f"{base_url.rstrip('/')}{path}"
     params = {"tenant_id": tenant_id} if tenant_id else {}
 
@@ -59,6 +63,9 @@ def fetch_report(
         body = response.json()
     except ValueError as exc:
         raise ReportUnavailable(f"{url} did not return JSON") from exc
+
+    if key is None:
+        return body
 
     report = body.get(key)
     if not report:

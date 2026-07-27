@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/report.requested.json",
+  "title": "report.requested",
+  "description": "Render a finished workflow as a document. Published by the gateway; consumed by the reporting service, which fetches the workflow itself so the document reflects its state at render time rather than at completion.",
+  "type": "object",
+  "required": ["workflow_id"],
+  "additionalProperties": false,
+  "properties": {
+    "report_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Allocated by the caller so the result url is known before the work starts."
+    },
+    "workflow_id": {"type": "string", "format": "uuid"}
+  }
+}

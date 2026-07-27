@@ -96,6 +96,45 @@ onMounted(async () => {
 
 onBeforeUnmount(() => clearInterval(timer))
 
+/*
+ * The document is the thing a person actually sends to someone. It is fetched
+ * as bytes and handed to the browser as a download, rather than opened in a
+ * tab: the gateway needs an Authorization header, and a plain link cannot
+ * carry one.
+ */
+const downloading = ref(false)
+
+async function download(format: 'html' | 'md') {
+  downloading.value = true
+  error.value = null
+  try {
+    const started = await api.post<{ report_id: string }>('/v1/reports', {
+      workflow_id: route.params.id,
+    })
+    // The service renders in the background; a short wait beats a spinner
+    // that needs its own state machine.
+    await new Promise(resolve => setTimeout(resolve, 1500))
+
+    const config = useRuntimeConfig()
+    const response = await fetch(
+      `${config.public.apiBase}/v1/reports/${started.report_id}/document?format=${format}`,
+      { headers: { Authorization: `Bearer ${useAuth().token.value}`, Accept: '*/*' } },
+    )
+    if (!response.ok) throw new Error('گزارش هنوز آماده نیست. چند لحظه بعد دوباره امتحان کنید.')
+
+    const url = URL.createObjectURL(await response.blob())
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `seo-report.${format}`
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (failure) {
+    error.value = (failure as Error).message
+  } finally {
+    downloading.value = false
+  }
+}
+
 const report = computed(() => workflow.value?.report ?? null)
 const summary = computed(() => report.value?.summary ?? null)
 
@@ -122,6 +161,21 @@ const tiles = computed(() => {
         {{ statusLabel(workflow.status) }}
       </span>
       <div class="spacer" />
+      <button
+        v-if="workflow && isTerminal(workflow.status)"
+        :disabled="downloading"
+        @click="download('html')"
+      >
+        {{ downloading ? 'در حال ساخت…' : 'دانلود گزارش' }}
+      </button>
+      <button
+        v-if="workflow && isTerminal(workflow.status)"
+        class="ghost"
+        :disabled="downloading"
+        @click="download('md')"
+      >
+        Markdown
+      </button>
       <NuxtLink to="/workflows"><button class="ghost">بازگشت</button></NuxtLink>
     </div>
 

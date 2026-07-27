@@ -328,6 +328,45 @@ services:
       postgres: {condition: service_healthy}
     restart: on-failure
 
+  reporting-api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/reporting.Dockerfile
+    command: ["uvicorn", "services.reporting.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      REPORTING_DATA_DIR: /var/lib/seoagent/reports
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+      ORCHESTRATOR_URL: http://orchestrator-api:8000
+    ports: ["127.0.0.1:8008:8000"]
+    volumes:
+      - reports-data:/var/lib/seoagent/reports
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  reporting-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/reporting.Dockerfile
+    command: ["python", "-m", "services.reporting.worker"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      REPORTING_DATA_DIR: /var/lib/seoagent/reports
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+      ORCHESTRATOR_URL: http://orchestrator-api:8000
+    volumes:
+      - reports-data:/var/lib/seoagent/reports
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    restart: on-failure
+
   orchestrator-api:
     build:
       context: ../..
@@ -414,3 +453,4 @@ volumes:
   links-data:
   content-data:
   optimizer-data:
+  reports-data:

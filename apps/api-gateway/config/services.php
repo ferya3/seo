@@ -21,6 +21,13 @@ return [
         'timeout' => (int) env('SERP_SERVICE_TIMEOUT', 15),
     ],
 
+    'reporting' => [
+        // Rendering reads the whole workflow report, so it is given more room
+        // than a request that only hands off work.
+        'url' => env('REPORTING_SERVICE_URL', 'http://reporting-api:8000'),
+        'timeout' => (int) env('REPORTING_SERVICE_TIMEOUT', 20),
+    ],
+
     'crawl' => [
         'url' => env('CRAWL_SERVICE_URL', 'http://crawl-api:8000'),
         'timeout' => (int) env('CRAWL_SERVICE_TIMEOUT', 10),
