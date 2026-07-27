@@ -347,6 +347,9 @@ def test_completion_emits_a_contract_valid_event(isolated, fake_provider, monkey
     validate_event("serp.checked", payload)
     assert payload["keywords_ranked"] == 1
     assert payload["result_url"] == f"/v1/checks/{check_id}"
+    # Carried on the event so a summary can say where the site is winning
+    # without reopening the full check.
+    assert payload["best"]["keyword"] == "کفش"
 
 
 def test_a_failed_run_still_reports(isolated, monkeypatch):

@@ -26,7 +26,7 @@ from typing import Any
 from shared.contracts import ContractError, validate_event
 from shared.store import PendingEvent
 
-from . import planner
+from . import planner, summary
 from .store import Workflow, WorkflowStore
 
 log = logging.getLogger(__name__)
@@ -218,23 +218,25 @@ class NoWorkToDo(Exception):
 def _finish(
     store: WorkflowStore, conn, workflow: Workflow, status: str, error: str | None
 ) -> None:
-    report = _report(workflow, status, error)
+    steps = [
+        {
+            "position": s.position,
+            "kind": s.kind,
+            "job_id": s.job_id,
+            "status": s.status,
+            "error": s.error,
+            "result_url": _result_url(s),
+        }
+        for s in sorted(workflow.steps, key=lambda s: s.position)
+    ]
+    # One list, used by both the report and the event. Built twice, they drift.
+    report = _report(workflow, status, error, steps)
     payload = {
         "workflow_id": workflow.workflow_id,
         "goal": workflow.goal,
         "status": status,
         "error": error,
-        "steps": [
-            {
-                "position": s.position,
-                "kind": s.kind,
-                "job_id": s.job_id,
-                "status": s.status,
-                "error": s.error,
-                "result_url": _result_url(s),
-            }
-            for s in sorted(workflow.steps, key=lambda s: s.position)
-        ],
+        "steps": steps,
         "headline": report["headline"],
         "result_url": f"/v1/workflows/{workflow.workflow_id}",
     }
@@ -254,7 +256,9 @@ def _finish(
     )
 
 
-def _report(workflow: Workflow, status: str, error: str | None) -> dict[str, Any]:
+def _report(
+    workflow: Workflow, status: str, error: str | None, steps: list[dict[str, Any]]
+) -> dict[str, Any]:
     """What the workflow produced, gathered in one place.
 
     Summaries only, and a url per step. The crawl report alone is megabytes;
@@ -268,10 +272,11 @@ def _report(workflow: Workflow, status: str, error: str | None) -> dict[str, Any
     research = result_of("keyword_research")
     serp = result_of("serp_check")
 
-    return {
+    report = {
         "goal": workflow.goal,
         "status": status,
         "error": error,
+        "steps": steps,
         "headline": {
             "overall_score": crawl.get("overall_score"),
             "total_issues": crawl.get("total_issues"),
@@ -283,6 +288,11 @@ def _report(workflow: Workflow, status: str, error: str | None) -> dict[str, Any
         "keywords": research,
         "rankings": serp,
     }
+    # The deterministic summary only — this runs while the workflow row is
+    # locked, so it may not touch the network. The model-written one replaces
+    # it afterwards, off the lock, from the worker. See summary.py.
+    report["summary"] = summary.deterministic(report)
+    return report
 
 
 def _step_result(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -315,6 +325,7 @@ def _step_result(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
         "keywords_checked": payload.get("keywords_checked"),
         "keywords_ranked": payload.get("keywords_ranked"),
         "average_position": payload.get("average_position"),
+        "best": payload.get("best"),
         "top_competitors": payload.get("top_competitors", [])[:5],
         "opportunities": payload.get("opportunities", [])[:10],
         "result_url": payload.get("result_url"),

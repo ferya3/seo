@@ -91,6 +91,7 @@ def serp_done(job_id: str, status: str = "completed", error: str | None = None) 
         "keywords_checked": 3,
         "keywords_ranked": 2,
         "average_position": 3.5,
+        "best": {"keyword": "کفش پیاده‌روی", "position": 2, "url": "https://example.com/w"},
         "top_competitors": [{"domain": "rival.com", "outranks_on": 2}],
         "opportunities": [{"keyword": "کفش", "position": None, "opportunity": 100}],
         "result_url": f"/v1/checks/{job_id}",
@@ -651,3 +652,138 @@ def test_the_tracked_count_reaches_the_plan(store, conn, monkeypatch):
         "SELECT payload FROM outbox WHERE event_type='serp.check_requested'"
     ).fetchone()[0]
     assert len(payload["keywords"]) == 2
+
+
+# ---------------------------------------------------------------- the summary
+
+
+def finished(store) -> str:
+    """A workflow taken all the way to completed."""
+    workflow_id = started(store)
+    steps = store.get(workflow_id).steps
+    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
+    engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
+    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
+    return workflow_id
+
+
+def test_a_finished_report_always_carries_a_summary(store):
+    """Written inside the finishing transaction, so it exists with or without
+    an API key. The model-written one replaces it later, or never."""
+    summary = store.get(finished(store)).report["summary"]
+    assert summary["source"] == "rules"
+    assert summary["text_fa"]
+    assert summary["next_actions"]
+    # The best ranking travels all the way from the SERP service into the
+    # sentence. It used to stop at the event boundary, so this sentence was
+    # written against a field that never arrived.
+    assert "کفش پیاده‌روی" in summary["text_fa"]
+
+
+def test_a_failed_workflow_is_summarised_too(store):
+    workflow_id = started(store)
+    step = store.get(workflow_id).step_at(1)
+    engine.on_completion(store, "crawl.completed", crawl_done(step.job_id, "failed", "timeout"))
+
+    summary = store.get(workflow_id).report["summary"]
+    assert "timeout" in summary["text_fa"]
+
+
+def test_the_report_lists_its_steps(store):
+    steps = store.get(finished(store)).report["steps"]
+    assert [s["kind"] for s in steps] == ["crawl", "keyword_research", "serp_check"]
+
+
+def test_the_summary_is_written_off_the_lock_not_inside_it(store, monkeypatch):
+    """The model call takes seconds. Doing it in `advance` would hold the
+    workflow's row lock for that whole time, and every redelivered completion
+    event for that workflow would queue up behind it."""
+    from agents.orchestrator import summary as summary_module
+
+    monkeypatch.setattr(summary_module.llm, "is_available", lambda: True)
+    monkeypatch.setattr(summary_module.llm, "ask", _explode)
+
+    workflow_id = finished(store)                      # would raise if it asked
+    assert store.get(workflow_id).report["summary"]["source"] == "rules"
+
+
+def _explode(*args, **kwargs):
+    raise AssertionError("the state machine must not call the model")
+
+
+def test_the_worker_upgrades_the_summary_when_the_model_answers(store, monkeypatch):
+    from agents.orchestrator import api, worker
+    from agents.orchestrator import summary as summary_module
+    from shared.events import Envelope
+
+    monkeypatch.setattr(api, "_store", store)
+    monkeypatch.setattr(summary_module.llm, "is_available", lambda: True)
+    monkeypatch.setattr(summary_module.llm, "ask", lambda *a, **kw: {
+        "summary": "سایت پایه‌ی فنی خوبی دارد ولی روی عبارت‌های تجاری دیده نمی‌شود.",
+        "next_actions": [{"action": "صفحه بساز", "why": "پوشش ندارد",
+                          "effort": "متوسط", "impact": "زیاد"}],
+        "watch_outs": ["حجم جستجوی واقعی در دسترس نیست."],
+    })
+    worker._seen.clear()
+
+    workflow_id = finished(store)
+    worker.handle(Envelope(
+        type="workflow.completed",
+        payload={"workflow_id": workflow_id},
+        producer="orchestrator",
+    ))
+
+    summary = store.get(workflow_id).report["summary"]
+    assert summary["source"] == "ai"
+    assert "عبارت‌های تجاری" in summary["text_fa"]
+    # The rest of the report is untouched: only the summary key is replaced.
+    assert store.get(workflow_id).report["rankings"]["average_position"] == 3.5
+
+
+def test_a_redelivered_completion_does_not_pay_for_a_second_model_call(store, monkeypatch):
+    from agents.orchestrator import api, worker
+    from agents.orchestrator import summary as summary_module
+    from shared.events import Envelope
+
+    monkeypatch.setattr(api, "_store", store)
+    workflow_id = finished(store)
+    store.save_summary(workflow_id, {"source": "ai", "text_fa": "قبلاً نوشته شده",
+                                     "next_actions": [], "watch_outs": [], "note": None})
+
+    monkeypatch.setattr(summary_module.llm, "is_available", lambda: True)
+    monkeypatch.setattr(summary_module.llm, "ask", _explode)
+    worker._seen.clear()
+
+    worker.handle(Envelope(
+        type="workflow.completed", payload={"workflow_id": workflow_id}, producer="orchestrator",
+    ))
+    assert store.get(workflow_id).report["summary"]["text_fa"] == "قبلاً نوشته شده"
+
+
+def test_the_worker_ignores_a_completion_for_a_workflow_it_does_not_have(store, monkeypatch):
+    from agents.orchestrator import api, worker
+    from shared.events import Envelope
+
+    monkeypatch.setattr(api, "_store", store)
+    worker._seen.clear()
+
+    worker.handle(Envelope(
+        type="workflow.completed",
+        payload={"workflow_id": str(uuid.uuid4())},
+        producer="orchestrator",
+    ))                                                  # no raise: nothing to dead-letter
+
+
+def test_a_summary_is_not_written_over_a_workflow_still_running(store):
+    """The state machine owns the report until the workflow is terminal.
+    Writing into it mid-flight would be overwritten by the next transition."""
+    workflow_id = started(store)
+    assert store.save_summary(workflow_id, {"source": "ai", "text_fa": "زود"}) is False
+
+
+def test_the_worker_listens_for_the_event_it_publishes_itself():
+    """workflow.completed is consumed by the same worker that emits it. Without
+    the binding the summary step simply never runs, and nothing says so."""
+    from agents.orchestrator import worker
+
+    assert "workflow.completed" in worker.ROUTING_KEYS

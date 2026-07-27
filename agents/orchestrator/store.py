@@ -235,6 +235,28 @@ class WorkflowStore:
         """Read through a connection the caller already holds."""
         return _load(conn, workflow_id)
 
+    def save_summary(self, workflow_id: str, summary: dict[str, Any]) -> bool:
+        """Replace the summary section of a finished workflow's report.
+
+        Deliberately narrow: it writes one key of the report and only for a
+        workflow that already reached a terminal state, so it cannot race the
+        state machine — nothing else writes a report after that point. It takes
+        no lock for the same reason.
+
+        Returns whether a row was updated, which is False for a workflow that
+        does not exist or has not finished.
+        """
+        _, Jsonb = _psycopg()
+        with self.pool.connection() as conn:
+            row = conn.execute(
+                "UPDATE workflows SET report = jsonb_set("
+                "  COALESCE(report, '{}'::jsonb), '{summary}', %s, true"
+                "), updated_at = now() "
+                "WHERE id = %s AND status = ANY(%s) RETURNING id",
+                (Jsonb(summary), workflow_id, list(TERMINAL)),
+            ).fetchone()
+        return row is not None
+
     # ---------------------------------------------------------------- reading
 
     def get(self, workflow_id: str) -> Workflow | None:

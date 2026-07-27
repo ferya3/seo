@@ -4,18 +4,47 @@ Everything else in this project works without an API key. When ANTHROPIC_API_KEY
 is present (and the `anthropic` package is installed) this layer adds the parts
 a rule engine can't do: judging whether the copy on a page actually answers the
 searcher's question, and drafting replacements.
+
+What is left here is the SEO half — the schemas and the prompts. How a request
+is made and how a disappointing response is handled moved to `shared/llm`, so
+the orchestrator's report summary and this file cannot disagree about what a
+refusal or a truncated answer means.
 """
 
 from __future__ import annotations
 
-import json
+import sys
+from pathlib import Path
 from typing import Any
 
-from .config import anthropic_api_key
 from .models import Issue, SiteContext
 
-MODEL = "claude-opus-5"
-MAX_TOKENS = 16000
+# The engine runs standalone out of services/engine with its own virtualenv, so
+# the repository root is not already importable the way it is for the services
+# started from the top level. Adding it here keeps `python -m seoagent` working
+# without teaching run.sh about the layout.
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from shared.llm import (  # noqa: E402
+    MAX_TOKENS,
+    MODEL,
+    SEO_SYSTEM_PROMPT,
+    AIUnavailable,
+    ask,
+    is_available,
+)
+
+__all__ = [
+    "AIUnavailable",
+    "MAX_TOKENS",
+    "MODEL",
+    "SYSTEM_PROMPT",
+    "audit_suggestions",
+    "is_available",
+    "keyword_suggestions",
+]
 
 AUDIT_SCHEMA = {
     "type": "object",
@@ -95,68 +124,13 @@ KEYWORD_SCHEMA = {
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT = (
-    "تو یک متخصص ارشد سئو هستی که با آخرین راهنماهای گوگل کار می‌کند: سیستم محتوای مفید، "
-    "معیارهای E-E-A-T، Core Web Vitals (LCP، INP، CLS)، ایندکس موبایل‌محور، و بهینه‌سازی "
-    "برای AI Overviews و موتورهای جستجوی مبتنی بر مدل زبانی.\n\n"
-    "قواعد پاسخ:\n"
-    "- همه‌ی خروجی‌ها را فارسی بنویس؛ فقط اصطلاحات فنی استاندارد سئو را انگلیسی نگه دار.\n"
-    "- پیشنهادها باید مشخص و قابل اجرا باشند، نه توصیه‌های کلی.\n"
-    "- چیزی را که در داده‌های ورودی نیست از خودت نساز؛ اگر داده کافی نیست همان را بگو.\n"
-    "- روش‌های کلاه‌سیاه یا هر چیزی که خلاف سیاست‌های اسپم گوگل است پیشنهاد نده."
-)
-
-
-class AIUnavailable(Exception):
-    """Raised when the AI layer can't run; callers fall back to rules only."""
-
-
-def is_available() -> bool:
-    if not anthropic_api_key():
-        return False
-    try:
-        import anthropic  # noqa: F401
-    except ImportError:
-        return False
-    return True
-
-
-def _client():
-    if not anthropic_api_key():
-        raise AIUnavailable("متغیر محیطی ANTHROPIC_API_KEY تنظیم نشده است.")
-    try:
-        import anthropic
-    except ImportError as exc:
-        raise AIUnavailable("پکیج anthropic نصب نیست: pip install anthropic") from exc
-    return anthropic.Anthropic()
+# Kept as a name here because callers and tests import it from this module;
+# the text itself is shared, not an audit-specific prompt.
+SYSTEM_PROMPT = SEO_SYSTEM_PROMPT
 
 
 def _ask(prompt: str, schema: dict[str, Any], effort: str = "medium") -> dict[str, Any]:
-    client = _client()
-    try:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT,
-            output_config={
-                "effort": effort,
-                "format": {"type": "json_schema", "schema": schema},
-            },
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except Exception as exc:  # noqa: BLE001 - surface any SDK/network error as one type
-        raise AIUnavailable(f"{type(exc).__name__}: {exc}") from exc
-
-    if response.stop_reason == "refusal":
-        raise AIUnavailable("مدل به این درخواست پاسخ نداد.")
-
-    text = next((block.text for block in response.content if block.type == "text"), "")
-    if not text:
-        raise AIUnavailable("پاسخ مدل خالی بود (احتمالاً سقف توکن پر شده است).")
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise AIUnavailable("پاسخ مدل قابل تجزیه نبود.") from exc
+    return ask(prompt, schema, system=SYSTEM_PROMPT, effort=effort, max_tokens=MAX_TOKENS)
 
 
 def _page_digest(ctx: SiteContext, limit: int = 12) -> str:

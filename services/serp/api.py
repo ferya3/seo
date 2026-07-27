@@ -233,6 +233,10 @@ def checked_payload(
         "keywords_checked": report.get("keywords_checked", 0),
         "keywords_ranked": report.get("keywords_ranked", 0),
         "average_position": report.get("average_position"),
+        # The single best ranking travels with the event because it is the one
+        # fact a summary wants and cannot derive: average_position says how the
+        # site does overall, this says where it is actually winning.
+        "best": report.get("best"),
         "top_competitors": report.get("top_competitors", [])[:10],
         "opportunities": [
             {"keyword": o["keyword"], "position": o["position"], "opportunity": o["opportunity"]}

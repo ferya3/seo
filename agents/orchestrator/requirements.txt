@@ -4,3 +4,6 @@ uvicorn[standard]>=0.32
 pika>=1.3
 jsonschema>=4.21
 psycopg[binary,pool]>=3.2
+
+# اختیاری — فقط برای خلاصه‌ی هوش مصنوعی. بدون آن گزارش خلاصه‌ی قانون‌محور دارد.
+# pip install anthropic
