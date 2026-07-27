@@ -9,6 +9,13 @@ return [
         'timeout' => (int) env('KEYWORD_SERVICE_TIMEOUT', 30),
     ],
 
+    'orchestrator' => [
+        'url' => env('ORCHESTRATOR_URL', 'http://orchestrator:8000'),
+        // Starting a workflow plans it and dispatches the first step; it does
+        // not wait for any of the work.
+        'timeout' => (int) env('ORCHESTRATOR_TIMEOUT', 15),
+    ],
+
     'crawl' => [
         'url' => env('CRAWL_SERVICE_URL', 'http://crawl-api:8000'),
         'timeout' => (int) env('CRAWL_SERVICE_TIMEOUT', 10),

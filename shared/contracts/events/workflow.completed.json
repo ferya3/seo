@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/workflow.completed.json",
+  "title": "workflow.completed",
+  "description": "A workflow reached a terminal state. Carries a summary of every step and where the full results live, not the results themselves.",
+  "type": "object",
+  "required": ["workflow_id", "goal", "status", "steps", "result_url"],
+  "additionalProperties": false,
+  "properties": {
+    "workflow_id": {"type": "string", "format": "uuid"},
+    "goal": {"type": "string"},
+    "status": {"enum": ["completed", "failed"]},
+    "error": {"type": ["string", "null"]},
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["position", "kind", "job_id", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "position": {"type": "integer"},
+          "kind": {"enum": ["crawl", "keyword_research"]},
+          "job_id": {"type": "string"},
+          "status": {"enum": ["pending", "dispatched", "completed", "failed", "skipped"]},
+          "error": {"type": ["string", "null"]},
+          "result_url": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "headline": {
+      "type": "object",
+      "description": "The few numbers worth putting in a notification without opening the report.",
+      "additionalProperties": false,
+      "properties": {
+        "overall_score": {"type": ["integer", "null"]},
+        "total_issues": {"type": ["integer", "null"]},
+        "keywords_found": {"type": ["integer", "null"]}
+      }
+    },
+    "result_url": {"type": "string"}
+  }
+}

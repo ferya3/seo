@@ -163,6 +163,39 @@ services:
       postgres: {condition: service_healthy}
     restart: on-failure
 
+  orchestrator-api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/orchestrator.Dockerfile
+    command: ["uvicorn", "agents.orchestrator.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+    ports: ["127.0.0.1:8003:8000"]
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  orchestrator-worker:
+    # The only consumer of crawl.completed and keyword.researched. Without it
+    # those events are published and nothing acts on them.
+    build:
+      context: ../..
+      dockerfile: infra/docker/orchestrator.Dockerfile
+    command: ["python", "-m", "agents.orchestrator.worker"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    restart: on-failure
+
   api-gateway:
     # The only service exposed to the outside in a real deployment; everything
     # else here is reachable only on the compose network.
@@ -180,6 +213,7 @@ services:
       REDIS_HOST: redis
       CRAWL_SERVICE_URL: http://crawl-api:8000
       KEYWORD_SERVICE_URL: http://keyword-api:8000
+      ORCHESTRATOR_URL: http://orchestrator-api:8000
     ports: ["127.0.0.1:8000:8000"]
     depends_on:
       postgres: {condition: service_healthy}

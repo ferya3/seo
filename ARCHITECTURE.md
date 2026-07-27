@@ -9,18 +9,19 @@
 | بخش | وضعیت | توضیح |
 | --- | --- | --- |
 | موتور سئو (`services/engine`) | ✅ کار می‌کند، ۱۵۶ تست | خزش، ۴۰+ قانون، امتیازدهی، تحقیق کلمات کلیدی، داشبورد |
-| قراردادها (`shared/contracts`) | ✅ کار می‌کند | envelope + ۵ رویداد، با اعتبارسنجی JSON Schema |
+| قراردادها (`shared/contracts`) | ✅ کار می‌کند | envelope + ۷ رویداد، با اعتبارسنجی JSON Schema |
 | باس رویداد (`shared/events`) | ✅ کار می‌کند، روی RabbitMQ 3.12 واقعی تست شد | publisher/consumer با publisher confirms؛ مسیر dead-letter هم اجرا شد: هندلری که خطا داد دقیقاً یک‌بار صدا زده شد و پیام در `.dlq` نشست، نه در حلقه‌ی بی‌نهایت |
 | ذخیره‌سازی فایلی (`shared/store.py`) | ✅ کار می‌کند | `FileJobStore` عمومی — حالت بدون دیتابیس، همان چیزی که نصب تک‌ماشینه استفاده می‌کند |
 | ذخیره‌سازی Postgres + outbox (`shared/db.py`) | ✅ کار می‌کند، ۲۷ تست روی Postgres 16 واقعی | همان اینترفیس `FileJobStore`، به‌علاوه نوشتن وضعیت و رویداد در **یک تراکنش** |
 | رله outbox (`shared/relay.py`) | ✅ کار می‌کند، مسیر کامل روی Postgres + RabbitMQ واقعی اجرا شد | outbox → بروکر → مصرف‌کننده؛ `event_id` استیج‌شده تا انتهای مسیر همان می‌ماند |
 | سرویس Crawl (`services/crawl`) | ✅ کار می‌کند، ۲۱ تست | API با FastAPI + ورکر باس، هر دو روی یک `run_crawl` |
 | سرویس Keyword (`services/keyword`) | ✅ کار می‌کند، ۲۳ تست | API با FastAPI + ورکر باس، هر دو روی یک `run_research` |
-| اسکیمای دیتابیس (`infra/db`) | ✅ روی Postgres 16 واقعی اجرا شد | هر سه مهاجرت روی دیتابیس خالی از صفر اعمال شدند، بدون خطا |
+| اسکیمای دیتابیس (`infra/db`) | ✅ روی Postgres 16 واقعی اجرا شد | هر چهار مهاجرت روی دیتابیس خالی از صفر اعمال شدند، بدون خطا |
 | docker-compose | ⚠️ نوشته شده، اجرا نشده | Postgres، Redis، RabbitMQ، Qdrant، Meilisearch، MinIO + سرویس‌های ما و گیت‌وی (اینجا داکر دیمن نبود) |
-| API Gateway (`apps/api-gateway`) | ✅ کار می‌کند، ۷۱ تست روی Postgres واقعی | Laravel 13 روی PHP 8.4؛ Sanctum، تنانسی از توکن، rate limit، ترجمه‌ی خطای سرویس‌ها |
+| API Gateway (`apps/api-gateway`) | ✅ کار می‌کند، ۸۴ تست روی Postgres واقعی | Laravel 13 روی PHP 8.4؛ Sanctum، تنانسی از توکن، rate limit، ترجمه‌ی خطای سرویس‌ها |
 | Auth و Projects | ✅ کار می‌کند | ثبت‌نام/ورود/خروج + CRUD پروژه، همان جدول‌های `tenants`/`users`/`projects` که سرویس‌ها به آن‌ها FK دارند |
-| بقیه سرویس‌ها و ایجنت‌ها | ❌ شروع نشده | SERP، Content، Optimizer، Internal Links، Competitor، Rank، GSC، Orchestrator |
+| Orchestrator (`agents/orchestrator`) | ✅ کار می‌کند، ۳۱ تست روی Postgres واقعی | اولین **مصرف‌کننده‌ی** رویدادها؛ حلقه‌ی کامل روی RabbitMQ و Postgres واقعی اجرا شد |
+| بقیه سرویس‌ها و ایجنت‌ها | ❌ شروع نشده | SERP، Content، Optimizer، Internal Links، Competitor، Rank، GSC |
 | Frontend (Nuxt) | ❌ شروع نشده | داشبورد فعلی همان Flask داخل موتور است |
 | k8s / terraform / monitoring | ❌ شروع نشده | |
 
@@ -42,7 +43,7 @@
 بدون دیتابیس، تست‌های Postgres skip می‌شوند و بقیه کار می‌کنند:
 
 ```bash
-pytest                       # ۲۰۱ تست، ۲۶ skip
+pytest                       # ۲۰۰ پاس، ۵۸ skip
 ```
 
 با دیتابیس واقعی:
@@ -50,7 +51,7 @@ pytest                       # ۲۰۱ تست، ۲۶ skip
 ```bash
 createdb seo
 for f in infra/db/migrations/*.sql; do psql -d seo -f "$f"; done
-TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo pytest    # ۲۲۷ تست
+TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo pytest    # ۲۵۸ تست
 ```
 
 `shared/tests` عمداً با فیک اجرا نمی‌شود: ارزش این ذخیره‌ساز اتمی بودن تراکنش
@@ -149,6 +150,42 @@ SQLite خودش نگه می‌داشت و `tenants` جای دیگری بود، �
 تست روی موتور دیگری یعنی دقیقاً همان حالت‌های جالب — `Ali@` در برابر `ali@` —
 در تست سبز و در واقعیت قرمز باشند.
 
+**Orchestrator اولین مصرف‌کننده است.** تا قبل از این، هر رویدادی که ساخته شده
+بود تولیدکننده داشت و هیچ مصرف‌کننده‌ای نداشت — یعنی کل باس توجیه‌نشده بود.
+گردش‌کار `site_audit` رویداد `crawl.requested` را می‌فرستد، منتظر
+`crawl.completed` می‌ماند، بعد `keyword.research_requested` را می‌فرستد، و در
+آخر `workflow.completed` را منتشر می‌کند. Orchestrator هیچ‌وقت سرویسی را با
+HTTP صدا نمی‌زند.
+
+**برنامه‌ریز قطعی است، نه مدل زبانی.** معماری اسم این را «ایجنت planner»
+گذاشته، ولی یک plan تصمیم درباره‌ی جریان کنترل است، و جریان کنترلی که هر بار
+فرق کند قابل دیباگ نیست. قانون‌ها شکل مراحل را تعیین می‌کنند؛ کار مدل — وقتی
+اضافه شود — پر کردن پارامترهاست نه اختراع مرحله. این باعث می‌شود کل
+Orchestrator بدون هیچ API key کار کند، همان تصمیمی که برای پیشنهادهای محتوا
+هم گرفته شد.
+
+**شناسه‌ی کار را Orchestrator از قبل می‌سازد، نه سرویس.** `crawl_id` قبل از
+ارسال ساخته و روی مرحله ذخیره می‌شود؛ به همین دلیل `crawl.completed` می‌تواند
+به مرحله‌ای که درخواستش کرده برگردد. تکیه بر `correlation_id` به تنهایی جواب
+نمی‌داد اگر سرویسی شناسه‌ی خودش را انتخاب می‌کرد.
+
+**پیشروی زیر قفل ردیف انجام می‌شود.** دو رویداد تکمیل می‌توانند هم‌زمان روی دو
+نمونه‌ی Orchestrator بنشینند؛ بدون `FOR UPDATE` هر دو همان مرحله‌ی pending را
+می‌دیدند و هر دو می‌فرستادندش — یعنی خزش دو بار اجرا می‌شد. تستش دو نخ را با
+`threading.Barrier` هم‌زمان می‌کند.
+
+**رویداد تکراری، یک بار پیش می‌برد.** گذار مرحله `dispatched → completed` است و
+با یک UPDATE شرطی انجام می‌شود، پس تحویل دوم هیچ ردیفی را نمی‌گیرد.
+
+**رویداد تکمیلی که به هیچ گردش‌کاری تعلق ندارد، خطا نیست.** خزش‌هایی که مستقیم
+از API شروع می‌شوند همان `crawl.completed` را منتشر می‌کنند؛ خطا حساب کردنشان
+یعنی dead-letter کردن پیام‌های کاملاً سالم.
+
+**Orchestrator حالت بدون دیتابیس ندارد.** بازگشت به فایل برای سرویس‌ها معنی
+دارد چون یک job یک نتیجه است؛ ولی یک گردش‌کار چند سرویس را در طول چند دقیقه
+هماهنگ می‌کند و «وضعیت را در همین پروسه نگه دار» حالتی نیست که بشود صادقانه
+پیشنهاد داد. نبود `DATABASE_URL` خطای بالا آمدن است، نه تنزل بی‌صدا.
+
 **بازگشت به فایل، بی‌صدا نیست.** اگر `DATABASE_URL` ست باشد ولی دیتابیس در
 دسترس نباشد، سرویس بالا می‌آید و روی فایل کار می‌کند — ولی با لاگ سطح خطا.
 نصب تک‌ماشینه‌ی توی README دیتابیس ندارد و باید کار کند؛ ولی از دست دادن
@@ -181,10 +218,37 @@ curl -X POST localhost:8000/api/v1/projects   -H "Authorization: Bearer $TOKEN" 
 curl -X POST localhost:8000/api/v1/research   -H "Authorization: Bearer $TOKEN" ...
 ```
 
+## اجرای حلقه‌ی کامل
+
+این دقیقاً همان چیزی است که اینجا اجرا شد (Postgres، RabbitMQ و چهار پروسه‌ی
+واقعی):
+
+```bash
+python -m services.crawl.worker &
+python -m services.keyword.worker &
+python -m agents.orchestrator.worker &
+python -m shared.relay &
+uvicorn agents.orchestrator.api:app --port 8200
+
+curl -X POST localhost:8200/v1/workflows \
+  -d '{"goal":"site_audit","inputs":{"start_url":"https://example.com"}}'
+```
+
+ترتیب رویدادهایی که در `outbox` ثبت شد:
+
+```
+crawl.requested             orchestrator
+crawl.completed             crawl-service
+page.updated  ×۲            crawl-service
+keyword.research_requested  orchestrator      ← فقط بعد از تمام شدن خزش
+keyword.researched          keyword-service
+workflow.completed          orchestrator
+```
+
 ## قدم بعدی
 
 ۱. بالا آوردن docker-compose به‌صورت کامل (اینجا داکر دیمن نبود؛ همه‌ی اجزا
    تک‌تک روی Postgres، RabbitMQ و Redis واقعی اجرا شدند، ولی نه از طریق compose)
-۲. سرویس بعدی: SERP
-۳. Orchestrator و ایجنت‌ها
+۲. سرویس بعدی: SERP — و اضافه کردنش به planner به‌عنوان مرحله‌ی سوم
+۳. لایه‌ی مدل زبانی: پر کردن پارامترهای plan و خلاصه‌ی نهایی
 ۴. Frontend

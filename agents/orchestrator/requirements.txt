@@ -1,0 +1,6 @@
+# Orchestrator — نیازی به موتور سئو ندارد، فقط باس و دیتابیس.
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pika>=1.3
+jsonschema>=4.21
+psycopg[binary,pool]>=3.2
