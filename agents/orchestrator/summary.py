@@ -25,6 +25,14 @@ log = logging.getLogger(__name__)
 
 EFFORT_VALUES = ["کم", "متوسط", "زیاد"]
 
+# The summary is read by a person, so a skipped step says "بررسی جایگاه", not
+# "serp_check". The internal name stays internal.
+STEP_FA = {
+    "crawl": "خزش سایت",
+    "keyword_research": "تحقیق کلمات کلیدی",
+    "serp_check": "بررسی جایگاه",
+}
+
 SUMMARY_SCHEMA = {
     "type": "object",
     "properties": {
@@ -120,7 +128,8 @@ def _sentences(report, headline, rankings) -> list[str]:
 
     skipped = [s for s in (report.get("steps") or []) if s.get("status") == "skipped"]
     for step in skipped:
-        out.append(f"مرحله‌ی «{step.get('kind')}» انجام نشد: {step.get('error')}.")
+        out.append(f"مرحله‌ی «{STEP_FA.get(step.get('kind'), step.get('kind'))}» انجام نشد: "
+                   f"{step.get('error')}.")
 
     return out or ["این تحلیل نتیجه‌ای برای گزارش کردن تولید نکرد."]
 

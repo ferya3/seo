@@ -1,0 +1,134 @@
+/* One stylesheet, no framework. The dashboard is six screens; a utility
+   framework would be more bytes than the app. */
+
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --ink: #16191d;
+  --muted: #5f6874;
+  --line: #e3e6ea;
+  --accent: #2f5fd0;
+  --good: #157347;
+  --fair: #9a6700;
+  --poor: #b02a37;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171c;
+    --panel: #1c2027;
+    --ink: #e9edf2;
+    --muted: #9aa4b2;
+    --line: #2b313a;
+    --accent: #7ea2f5;
+    --good: #4ec98a;
+    --fair: #e0b341;
+    --poor: #f0868f;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Vazirmatn, "Segoe UI", Tahoma, sans-serif;
+  line-height: 1.7;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.shell { max-width: 1000px; margin: 0 auto; padding: 0 20px 60px; }
+
+header.bar {
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  margin-bottom: 28px;
+}
+header.bar .shell {
+  display: flex; align-items: center; gap: 20px;
+  padding-top: 14px; padding-bottom: 14px;
+}
+header.bar nav { display: flex; gap: 16px; margin-inline-start: auto; }
+header.bar .brand { font-weight: 700; font-size: 1.05rem; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  margin-bottom: 18px;
+}
+
+h1 { font-size: 1.5rem; margin: 0 0 6px; }
+h2 { font-size: 1.15rem; margin: 0 0 12px; }
+h3 { font-size: 1rem; margin: 18px 0 8px; }
+p.lede { color: var(--muted); margin-top: 0; }
+
+label { display: block; margin-bottom: 12px; font-size: 0.92rem; }
+label span { display: block; margin-bottom: 4px; color: var(--muted); }
+
+input, select {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+button {
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.55; cursor: default; }
+button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+
+.error {
+  border: 1px solid var(--poor);
+  color: var(--poor);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: start; padding: 9px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
+
+/* SEO terms stay English inside Persian prose, so they need their own
+   direction or the punctuation lands on the wrong side. */
+.ltr { direction: ltr; display: inline-block; unicode-bidi: isolate; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.tile .value { font-size: 1.6rem; font-weight: 700; }
+.tile .name { color: var(--muted); font-size: 0.85rem; }
+.tile .value.good { color: var(--good); }
+.tile .value.fair { color: var(--fair); }
+.tile .value.poor { color: var(--poor); }
+
+.pill {
+  display: inline-block; padding: 1px 10px; border-radius: 999px;
+  font-size: 0.82rem; border: 1px solid var(--line); color: var(--muted);
+}
+.pill.completed { color: var(--good); border-color: var(--good); }
+.pill.failed { color: var(--poor); border-color: var(--poor); }
+.pill.running, .pill.queued, .pill.dispatched { color: var(--accent); border-color: var(--accent); }
+
+.muted { color: var(--muted); }
+.summary { font-size: 1.02rem; }
+.actions li { margin-bottom: 10px; }
+.rowbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.rowbar h1 { margin: 0; }
+.rowbar .spacer { margin-inline-start: auto; }

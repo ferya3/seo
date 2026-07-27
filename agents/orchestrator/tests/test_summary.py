@@ -147,7 +147,11 @@ def test_a_skipped_step_is_reported_as_not_done_rather_than_ignored():
         {"position": 3, "kind": "serp_check", "status": "skipped",
          "error": "research produced no keywords to rank-check"},
     ]}
-    assert "serp_check" in summary.deterministic(report)["text_fa"]
+    text = summary.deterministic(report)["text_fa"]
+    # Named the way the dashboard names it, not by its internal kind. Seen in
+    # the browser: the summary read «serp_check» انجام نشد.
+    assert "بررسی جایگاه" in text
+    assert "serp_check" not in text
 
 
 def test_at_most_five_actions_are_offered():
