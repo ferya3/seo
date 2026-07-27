@@ -164,4 +164,25 @@ final class SerpApiTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/v1/checks', self::BODY)->assertStatus(429);
     }
+    public function test_reading_a_check_asks_only_for_the_callers_own(): void
+    {
+        // Reads used to carry no tenant at all: any id read any account's data.
+        [$user, $tenant] = $this->actor();
+        Http::fake(['*' => Http::response(['id' => 'x'], 200)]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/checks/x')->assertOk();
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'tenant_id='.$tenant->id));
+    }
+
+    public function test_listing_checks_asks_only_for_the_callers_own(): void
+    {
+        [$user, $tenant] = $this->actor();
+        Http::fake(['*' => Http::response([], 200)]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/checks')->assertOk();
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'tenant_id='.$tenant->id));
+    }
+
 }

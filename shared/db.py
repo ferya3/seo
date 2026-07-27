@@ -147,9 +147,16 @@ class PostgresJobStore(Generic[R]):
             job_id=job_id, subject=subject, tenant_id=tenant_id, project_id=project_id, **extra
         )
 
-    def get(self, job_id: str) -> R | None:
+    def get(self, job_id: str, tenant_id: str | None = None) -> R | None:
+        """Filtered in SQL rather than after loading: the row must not leave
+        the database for a caller who is not allowed to see it."""
+        sql, params = f"{self._select} WHERE id = %s", [job_id]
+        if tenant_id is not None:
+            sql += " AND tenant_id = %s"
+            params.append(tenant_id)
+
         with self.pool.connection() as conn:
-            row = conn.execute(f"{self._select} WHERE id = %s", (job_id,)).fetchone()
+            row = conn.execute(sql, params).fetchone()
         return self._row_to_record(row) if row else None
 
     def update(self, job_id: str, **changes: Any) -> R:
@@ -205,11 +212,16 @@ class PostgresJobStore(Generic[R]):
                     _stage(conn, event, record)
         return record
 
-    def recent(self, limit: int = 25) -> list[R]:
+    def recent(self, limit: int = 25, tenant_id: str | None = None) -> list[R]:
+        sql, params = self._select, []
+        if tenant_id is not None:
+            sql += " WHERE tenant_id = %s"
+            params.append(tenant_id)
+        sql += " ORDER BY created_at DESC LIMIT %s"
+        params.append(limit)
+
         with self.pool.connection() as conn:
-            rows = conn.execute(
-                f"{self._select} ORDER BY created_at DESC LIMIT %s", (limit,)
-            ).fetchall()
+            rows = conn.execute(sql, params).fetchall()
         return [self._row_to_record(row) for row in rows]
 
     def count(self) -> int:

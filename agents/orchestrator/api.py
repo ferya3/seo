@@ -128,17 +128,23 @@ def create_workflow(request: WorkflowRequest, background: BackgroundTasks) -> Wo
     )
 
 
+# `tenant_id` is a query parameter because this service does not authenticate
+# anyone — the gateway resolves the tenant from the token and passes it on.
+# Reads used to ignore it, so one workflow id was enough to read another
+# tenant's whole audit, and the list endpoint returned everyone's.
 @app.get("/v1/workflows/{workflow_id}")
-def get_workflow(workflow_id: str) -> dict[str, Any]:
-    workflow = store().get(workflow_id)
+def get_workflow(workflow_id: str, tenant_id: str | None = None) -> dict[str, Any]:
+    workflow = store().get(workflow_id, tenant_id=tenant_id)
     if workflow is None:
+        # Missing and not-yours are the same answer on purpose: a 403 would
+        # confirm the id belongs to someone.
         raise HTTPException(404, "workflow not found")
     return workflow.to_dict()
 
 
 @app.get("/v1/workflows")
-def list_workflows(limit: int = 25) -> list[dict[str, Any]]:
-    return [w.summary() for w in store().recent(limit)]
+def list_workflows(limit: int = 25, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    return [w.summary() for w in store().recent(limit, tenant_id=tenant_id)]
 
 
 def run_workflow(

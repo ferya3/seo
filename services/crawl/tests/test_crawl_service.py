@@ -318,3 +318,58 @@ def test_worker_dead_letters_a_malformed_request(isolated):
         worker.handle(
             Envelope(type="crawl.requested", payload={"nope": 1}, producer="gateway")
         )
+
+
+# --------------------------------------------------------------------- tenancy
+
+
+def test_a_crawl_is_only_readable_by_the_tenant_that_owns_it(isolated, client):
+    """Reads used to ignore tenancy entirely: writes were scoped by a foreign
+    key, reads were not, so one id was enough to read another account's report.
+    Found by reading the gateway while building a UI on top of it."""
+    isolated.store.create("c-1", "https://example.com", tenant_id="tenant-a")
+
+    assert client.get("/v1/crawls/c-1", params={"tenant_id": "tenant-a"}).status_code == 200
+    # 404, not 403: a 403 would confirm the id exists.
+    assert client.get("/v1/crawls/c-1", params={"tenant_id": "tenant-b"}).status_code == 404
+
+
+def test_a_listing_shows_only_the_asking_tenants_crawls(isolated, client):
+    isolated.store.create("c-1", "https://mine.example", tenant_id="tenant-a")
+    isolated.store.create("c-2", "https://theirs.example", tenant_id="tenant-b")
+
+    listed = client.get("/v1/crawls", params={"tenant_id": "tenant-a"}).json()
+    assert [row["crawl_id"] for row in listed] == ["c-1"]
+
+
+def test_a_listing_is_not_starved_by_another_tenants_rows(isolated, client):
+    """The first cut read `limit` files and filtered afterwards, so a tenant
+    with two crawls saw none if ten of someone else's were newer."""
+    for i in range(10):
+        isolated.store.create(f"theirs-{i}", "https://theirs.example", tenant_id="tenant-b")
+    isolated.store.create("mine-1", "https://mine.example", tenant_id="tenant-a")
+
+    listed = client.get("/v1/crawls", params={"limit": 5, "tenant_id": "tenant-a"}).json()
+    assert [row["crawl_id"] for row in listed] == ["mine-1"]
+
+
+def test_a_worker_reading_its_own_job_is_not_filtered(isolated):
+    """tenant_id=None means "do not filter" — the mode a worker uses when it
+    reads back a job it is already running."""
+    isolated.store.create("c-1", "https://example.com", tenant_id="tenant-a")
+
+    assert isolated.store.get("c-1") is not None
+
+
+def test_tenancy_survives_a_restart(isolated, tmp_path):
+    """Files were written from `to_dict`, which each service overrides for its
+    public payload — and none of them included tenant_id. The record answered
+    correctly from memory and lost its owner the moment it was read back from
+    disk, so a tenant's list emptied itself when the process restarted."""
+    from services.crawl.store import CrawlStore
+
+    isolated.store.create("c-1", "https://example.com", tenant_id="tenant-a")
+
+    fresh = CrawlStore(tmp_path / "crawls")            # nothing cached in memory
+    assert fresh.get("c-1", tenant_id="tenant-a") is not None
+    assert fresh.get("c-1", tenant_id="tenant-b") is None

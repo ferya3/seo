@@ -44,9 +44,11 @@ final class OrchestratorClient extends ServiceClient
      *
      * @throws ServiceUnavailable
      */
-    public function get(string $workflowId): ?array
+    public function get(string $workflowId, ?string $tenantId): ?array
     {
-        $response = $this->send(fn () => $this->request()->get("/v1/workflows/{$workflowId}"));
+        $response = $this->send(
+            fn () => $this->request()->get("/v1/workflows/{$workflowId}", $this->scopedTo($tenantId))
+        );
 
         if ($response->status() === 404) {
             return null;
@@ -60,9 +62,11 @@ final class OrchestratorClient extends ServiceClient
      *
      * @throws ServiceUnavailable
      */
-    public function recent(int $limit = 25): array
+    public function recent(int $limit, ?string $tenantId): array
     {
-        $response = $this->send(fn () => $this->request()->get('/v1/workflows', ['limit' => $limit]));
+        $response = $this->send(fn () => $this->request()->get(
+            '/v1/workflows', ['limit' => $limit] + $this->scopedTo($tenantId)
+        ));
 
         return $this->usable($response)->json();
     }

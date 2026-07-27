@@ -121,17 +121,23 @@ def create_research(request: ResearchRequest, background: BackgroundTasks) -> Re
     )
 
 
+# `tenant_id` is a query parameter rather than something inferred here: this
+# service has no idea who is calling, by design — the gateway authenticates and
+# passes on the tenant it resolved from the token. Reads used to ignore it
+# entirely, so any id was enough to read any tenant's report.
 @app.get("/v1/research/{research_id}")
-def get_research(research_id: str) -> dict[str, Any]:
-    record = store.get(research_id)
+def get_research(research_id: str, tenant_id: str | None = None) -> dict[str, Any]:
+    record = store.get(research_id, tenant_id=tenant_id)
     if record is None:
+        # Missing and not-yours answer the same way. A 403 here would confirm
+        # the id exists, which is itself worth something to a guesser.
         raise HTTPException(404, "research not found")
     return record.to_dict()
 
 
 @app.get("/v1/research")
-def list_research(limit: int = 25) -> list[dict[str, Any]]:
-    return [r.summary() for r in store.recent(limit)]
+def list_research(limit: int = 25, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    return [r.summary() for r in store.recent(limit, tenant_id=tenant_id)]
 
 
 # ------------------------------------------------------------------- the work

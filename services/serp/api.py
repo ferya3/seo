@@ -127,17 +127,23 @@ def create_check(request: CheckRequest, background: BackgroundTasks) -> CheckAcc
     return CheckAccepted(check_id=check_id, status="queued", result_url=f"/v1/checks/{check_id}")
 
 
+# `tenant_id` is a query parameter rather than something inferred here: this
+# service has no idea who is calling, by design — the gateway authenticates and
+# passes on the tenant it resolved from the token. Reads used to ignore it
+# entirely, so any id was enough to read any tenant's report.
 @app.get("/v1/checks/{check_id}")
-def get_check(check_id: str) -> dict[str, Any]:
-    record = store.get(check_id)
+def get_check(check_id: str, tenant_id: str | None = None) -> dict[str, Any]:
+    record = store.get(check_id, tenant_id=tenant_id)
     if record is None:
+        # Missing and not-yours answer the same way. A 403 here would confirm
+        # the id exists, which is itself worth something to a guesser.
         raise HTTPException(404, "check not found")
     return record.to_dict()
 
 
 @app.get("/v1/checks")
-def list_checks(limit: int = 25) -> list[dict[str, Any]]:
-    return [r.summary() for r in store.recent(limit)]
+def list_checks(limit: int = 25, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    return [r.summary() for r in store.recent(limit, tenant_id=tenant_id)]
 
 
 # ------------------------------------------------------------------- the work

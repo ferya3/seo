@@ -259,17 +259,26 @@ class WorkflowStore:
 
     # ---------------------------------------------------------------- reading
 
-    def get(self, workflow_id: str) -> Workflow | None:
+    def get(self, workflow_id: str, tenant_id: str | None = None) -> Workflow | None:
+        """`tenant_id=None` means "do not filter", which is what the worker
+        wants when it reads back a workflow it is already handling. Every HTTP
+        read passes the caller's tenant — see the note in api.py."""
         with self.pool.connection() as conn:
-            return _load(conn, workflow_id)
+            workflow = _load(conn, workflow_id)
+        if workflow is None or tenant_id is None:
+            return workflow
+        return workflow if workflow.tenant_id == tenant_id else None
 
-    def recent(self, limit: int = 25) -> list[Workflow]:
+    def recent(self, limit: int = 25, tenant_id: str | None = None) -> list[Workflow]:
+        sql, params = "SELECT id FROM workflows", []
+        if tenant_id is not None:
+            sql += " WHERE tenant_id = %s"
+            params.append(tenant_id)
+        sql += " ORDER BY created_at DESC LIMIT %s"
+        params.append(limit)
+
         with self.pool.connection() as conn:
-            ids = [
-                str(r[0]) for r in conn.execute(
-                    "SELECT id FROM workflows ORDER BY created_at DESC LIMIT %s", (limit,)
-                ).fetchall()
-            ]
+            ids = [str(r[0]) for r in conn.execute(sql, params).fetchall()]
             return [w for w in (_load(conn, i) for i in ids) if w is not None]
 
     def count(self) -> int:

@@ -60,10 +60,12 @@ final class WorkflowController extends Controller
         return response()->json($accepted, 202);
     }
 
-    public function show(string $workflowId): JsonResponse
+    public function show(Request $request, string $workflowId): JsonResponse
     {
         try {
-            $workflow = $this->orchestrator->get($workflowId);
+            // Scoped to the caller's tenant, so another account's id answers
+            // 404 rather than handing over their report.
+            $workflow = $this->orchestrator->get($workflowId, $request->user()?->tenant_id);
         } catch (ServiceUnavailable) {
             return response()->json(['error' => 'orchestrator unavailable'], 503);
         }
@@ -78,7 +80,7 @@ final class WorkflowController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $workflows = $this->orchestrator->recent((int) $request->query('limit', '25'));
+            $workflows = $this->orchestrator->recent((int) $request->query('limit', '25'), $request->user()?->tenant_id);
         } catch (ServiceUnavailable) {
             return response()->json(['error' => 'orchestrator unavailable'], 503);
         }

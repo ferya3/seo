@@ -157,4 +157,27 @@ final class KeywordApiTest extends TestCase
 
         $this->actingAs($user, 'sanctum')->postJson('/api/v1/research', ['seed' => 'کفش'])->assertStatus(429);
     }
+    public function test_reading_a_research_asks_only_for_the_callers_own(): void
+    {
+        // Reads used to carry no tenant at all: any id read any account's data.
+        $tenant = Tenant::factory()->create();
+        $user = $this->user($tenant);
+        Http::fake(['*' => Http::response(['id' => 'x'], 200)]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/research/x')->assertOk();
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'tenant_id='.$tenant->id));
+    }
+
+    public function test_listing_research_asks_only_for_the_callers_own(): void
+    {
+        $tenant = Tenant::factory()->create();
+        $user = $this->user($tenant);
+        Http::fake(['*' => Http::response([], 200)]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/research')->assertOk();
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'tenant_id='.$tenant->id));
+    }
+
 }

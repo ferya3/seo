@@ -133,17 +133,23 @@ def create_crawl(request: CrawlRequest, background: BackgroundTasks) -> CrawlAcc
     return CrawlAccepted(crawl_id=crawl_id, status="queued", result_url=f"/v1/crawls/{crawl_id}")
 
 
+# `tenant_id` is a query parameter rather than something inferred here: this
+# service has no idea who is calling, by design — the gateway authenticates and
+# passes on the tenant it resolved from the token. Reads used to ignore it
+# entirely, so any crawl id was enough to read any tenant's report.
 @app.get("/v1/crawls/{crawl_id}")
-def get_crawl(crawl_id: str) -> dict[str, Any]:
-    record = store.get(crawl_id)
+def get_crawl(crawl_id: str, tenant_id: str | None = None) -> dict[str, Any]:
+    record = store.get(crawl_id, tenant_id=tenant_id)
     if record is None:
+        # Missing and not-yours answer the same way. A 403 here would confirm
+        # the id exists, which is itself worth something to a guesser.
         raise HTTPException(404, "crawl not found")
     return record.to_dict()
 
 
 @app.get("/v1/crawls")
-def list_crawls(limit: int = 25) -> list[dict[str, Any]]:
-    return [r.summary() for r in store.recent(limit)]
+def list_crawls(limit: int = 25, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    return [r.summary() for r in store.recent(limit, tenant_id=tenant_id)]
 
 
 # ------------------------------------------------------------------- the work

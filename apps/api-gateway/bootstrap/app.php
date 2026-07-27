@@ -15,7 +15,16 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        /*
+         * There is no login page to send anyone to — this app is an API and
+         * nothing else. Laravel's default guest redirect calls route('login'),
+         * which does not exist here, so an unauthenticated request that did
+         * not ask for JSON blew up with RouteNotFoundException and came back
+         * as 500 instead of 401. Found by curling the running gateway; the
+         * test suite missed it because getJson() sets an Accept header and
+         * that path skips the redirect entirely.
+         */
+        $middleware->redirectGuestsTo(fn (Request $request) => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

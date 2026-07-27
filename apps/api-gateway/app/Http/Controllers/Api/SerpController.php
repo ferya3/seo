@@ -51,10 +51,12 @@ final class SerpController extends Controller
         return response()->json($accepted, 202);
     }
 
-    public function show(string $checkId): JsonResponse
+    public function show(Request $request, string $checkId): JsonResponse
     {
         try {
-            $check = $this->serp->get($checkId);
+            // Scoped to the caller's tenant, so another account's id answers
+            // 404 rather than handing over their report.
+            $check = $this->serp->get($checkId, $request->user()?->tenant_id);
         } catch (ServiceUnavailable) {
             return response()->json(['error' => 'serp service unavailable'], 503);
         }
@@ -69,7 +71,7 @@ final class SerpController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $checks = $this->serp->recent((int) $request->query('limit', '25'));
+            $checks = $this->serp->recent((int) $request->query('limit', '25'), $request->user()?->tenant_id);
         } catch (ServiceUnavailable) {
             return response()->json(['error' => 'serp service unavailable'], 503);
         }

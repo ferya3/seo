@@ -217,4 +217,18 @@ final class AuthTest extends TestCase
             ->assertOk()
             ->assertJson(['tenant_id' => $tenant->id]);
     }
+    public function test_an_unauthenticated_request_is_401_even_without_an_accept_header(): void
+    {
+        /*
+         * Found by curling the running gateway, not by this suite: getJson()
+         * sets Accept: application/json, and that path never reaches the guest
+         * redirect. A plain curl did, Laravel tried to redirect to a `login`
+         * route this API does not have, and a missing token came back as 500.
+         */
+        $response = $this->get('/api/v1/workflows');
+
+        $response->assertStatus(401);
+        $this->assertStringContainsString('Unauthenticated', $response->getContent());
+    }
+
 }

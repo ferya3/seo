@@ -51,9 +51,11 @@ final class KeywordServiceClient extends ServiceClient
      *
      * @throws ServiceUnavailable
      */
-    public function get(string $researchId): ?array
+    public function get(string $researchId, ?string $tenantId): ?array
     {
-        $response = $this->send(fn () => $this->request()->get("/v1/research/{$researchId}"));
+        $response = $this->send(
+            fn () => $this->request()->get("/v1/research/{$researchId}", $this->scopedTo($tenantId))
+        );
 
         if ($response->status() === 404) {
             return null;
@@ -67,9 +69,11 @@ final class KeywordServiceClient extends ServiceClient
      *
      * @throws ServiceUnavailable
      */
-    public function recent(int $limit = 25): array
+    public function recent(int $limit, ?string $tenantId): array
     {
-        $response = $this->send(fn () => $this->request()->get('/v1/research', ['limit' => $limit]));
+        $response = $this->send(fn () => $this->request()->get(
+            '/v1/research', ['limit' => $limit] + $this->scopedTo($tenantId)
+        ));
 
         return $this->usable($response)->json();
     }

@@ -196,4 +196,44 @@ final class WorkflowApiTest extends TestCase
             ->postJson('/api/v1/workflows', ['start_url' => 'https://example.com'])
             ->assertStatus(429);
     }
+    public function test_reading_a_workflow_asks_only_for_the_callers_own(): void
+    {
+        /*
+         * The hole this closes: reads carried no tenant, so a workflow id was
+         * enough to read another account's entire audit — score, keywords,
+         * rankings and all — and GET /v1/workflows returned every tenant's.
+         */
+        [$user, $tenant] = $this->actor();
+        Http::fake(['*' => Http::response(['workflow_id' => 'w-1'], 200)]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/workflows/w-1')->assertOk();
+
+        Http::assertSent(fn ($request) => str_contains(
+            $request->url(), 'tenant_id='.$tenant->id
+        ));
+    }
+
+    public function test_listing_workflows_asks_only_for_the_callers_own(): void
+    {
+        [$user, $tenant] = $this->actor();
+        Http::fake(['*' => Http::response([], 200)]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/workflows')->assertOk();
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'tenant_id='.$tenant->id));
+    }
+
+    public function test_another_tenants_workflow_is_not_found(): void
+    {
+        // The orchestrator answers 404 for a workflow the tenant does not own,
+        // and the gateway passes that through unchanged — not 403, which would
+        // confirm the id belongs to someone.
+        [$user] = $this->actor();
+        Http::fake(['*' => Http::response(['detail' => 'workflow not found'], 404)]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/workflows/somebody-elses-id')
+            ->assertNotFound();
+    }
+
 }

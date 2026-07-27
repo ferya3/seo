@@ -32,6 +32,13 @@ use Illuminate\Support\Facades\Http;
  */
 abstract class ServiceClient
 {
+    /**
+     * Stands in for a caller with no tenant. The same trick Project::ownedBy
+     * uses: an id nothing can be owned by, so a broken principal reads an
+     * empty list instead of everyone's.
+     */
+    private const NOBODY = '00000000-0000-0000-0000-000000000000';
+
     public function __construct(
         protected readonly string $baseUrl,
         protected readonly int $timeout,
@@ -83,5 +90,21 @@ abstract class ServiceClient
     protected function reason(Response $response): string
     {
         return (string) $response->json('detail', 'invalid request');
+    }
+
+    /**
+     * Query parameters that scope a read to one tenant.
+     *
+     * Every read method takes the tenant as a required argument rather than an
+     * optional one, because the version where it was optional is the version
+     * that shipped: writes were tenant-scoped, reads were not, and any id was
+     * enough to read another account's report. A required parameter cannot be
+     * forgotten the way an optional one was.
+     *
+     * @return array<string, string>
+     */
+    protected function scopedTo(?string $tenantId): array
+    {
+        return ['tenant_id' => $tenantId ?? self::NOBODY];
     }
 }

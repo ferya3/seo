@@ -258,6 +258,37 @@ def test_tenancy_travels_with_the_event(research, conn):
     assert (str(row[0]), str(row[1])) == (tenant, project)
 
 
+
+def _tenant(conn, name: str = "acme") -> str:
+    tenant = str(uuid.uuid4())
+    conn.execute("INSERT INTO tenants (id, name) VALUES (%s, %s)", (tenant, name))
+    return tenant
+
+
+def test_a_job_is_only_readable_by_the_tenant_that_owns_it(crawls, conn):
+    """Filtered in SQL, not after loading: a row a caller may not see should
+    not leave the database at all."""
+    mine, theirs = _tenant(conn, "mine"), _tenant(conn, "theirs")
+    job_id = str(uuid.uuid4())
+    crawls.create(job_id, "https://example.com", tenant_id=mine)
+
+    assert crawls.get(job_id, tenant_id=mine) is not None
+    assert crawls.get(job_id, tenant_id=theirs) is None
+    # No tenant means no filter — the mode a worker uses on its own job.
+    assert crawls.get(job_id) is not None
+
+
+def test_recent_shows_one_tenants_jobs_only(crawls, conn):
+    mine, theirs = _tenant(conn, "mine"), _tenant(conn, "theirs")
+    for _ in range(3):
+        crawls.create(str(uuid.uuid4()), "https://theirs.example", tenant_id=theirs)
+    ours = str(uuid.uuid4())
+    crawls.create(ours, "https://mine.example", tenant_id=mine)
+
+    assert [r.job_id for r in crawls.recent(25, tenant_id=mine)] == [ours]
+    assert len(crawls.recent(25)) == 4
+
+
 # ------------------------------------------------------------------- the relay
 
 

@@ -253,4 +253,27 @@ final class CrawlApiTest extends TestCase
             ->postJson('/api/v1/crawls', ['start_url' => 'https://example.com'])
             ->assertStatus(202);
     }
+    public function test_reading_a_crawl_asks_only_for_the_callers_own(): void
+    {
+        // Reads used to carry no tenant at all: any id read any account's data.
+        $tenant = Tenant::factory()->create();
+        $user = $this->user($tenant);
+        Http::fake(['*' => Http::response(['id' => 'x'], 200)]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/crawls/x')->assertOk();
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'tenant_id='.$tenant->id));
+    }
+
+    public function test_listing_crawls_asks_only_for_the_callers_own(): void
+    {
+        $tenant = Tenant::factory()->create();
+        $user = $this->user($tenant);
+        Http::fake(['*' => Http::response([], 200)]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/crawls')->assertOk();
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'tenant_id='.$tenant->id));
+    }
+
 }

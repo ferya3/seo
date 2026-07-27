@@ -32,7 +32,7 @@ final class ServiceClientTest extends TestCase
     {
         Http::fake(['*' => Http::response(['detail' => 'crawl not found'], 404)]);
 
-        $this->assertNull($this->client()->get('missing-id'));
+        $this->assertNull($this->client()->get('missing-id', 'tenant-1'));
     }
 
     public function test_a_400_keeps_the_services_own_explanation(): void
@@ -81,7 +81,7 @@ final class ServiceClientTest extends TestCase
 
         $this->expectException(ServiceUnavailable::class);
 
-        $this->client()->get('any-id');
+        $this->client()->get('any-id', 'tenant-1');
     }
 
     public function test_a_successful_start_returns_the_payload(): void
@@ -89,6 +89,38 @@ final class ServiceClientTest extends TestCase
         Http::fake(['*' => Http::response(['crawl_id' => 'abc', 'status' => 'queued'], 202)]);
 
         $this->assertSame('abc', $this->client()->start('https://example.com')['crawl_id']);
+    }
+
+    public function test_a_read_is_scoped_to_the_callers_tenant(): void
+    {
+        // The bug this pins: reads carried no tenant at all, so a crawl id was
+        // enough to read any account's report. Both read methods take the
+        // tenant as a required argument now — omitting it will not compile.
+        Http::fake(['*' => Http::response(['crawl_id' => 'abc'], 200)]);
+
+        $this->client()->get('abc', 'tenant-1');
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'tenant_id=tenant-1'));
+    }
+
+    public function test_a_listing_is_scoped_to_the_callers_tenant(): void
+    {
+        Http::fake(['*' => Http::response([], 200)]);
+
+        $this->client()->recent(25, 'tenant-1');
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'tenant_id=tenant-1')
+            && str_contains($request->url(), 'limit=25'));
+    }
+
+    public function test_a_caller_with_no_tenant_reads_nothing_rather_than_everything(): void
+    {
+        // A user row with no tenant is broken, and the safe answer to broken
+        // is "you have nothing", not an unfiltered query.
+        Http::fake(['*' => Http::response([], 200)]);
+
+        $this->client()->recent(25, null);
+        Http::assertSent(fn ($request) => str_contains(
+            $request->url(), 'tenant_id=00000000-0000-0000-0000-000000000000'
+        ));
     }
 
     public function test_options_are_merged_but_the_url_wins(): void

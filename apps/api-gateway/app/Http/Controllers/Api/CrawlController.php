@@ -58,10 +58,12 @@ final class CrawlController extends Controller
         return response()->json($accepted, 202);
     }
 
-    public function show(string $crawlId): JsonResponse
+    public function show(Request $request, string $crawlId): JsonResponse
     {
         try {
-            $crawl = $this->crawls->get($crawlId);
+            // Scoped to the caller's tenant, so another account's id answers
+            // 404 rather than handing over their report.
+            $crawl = $this->crawls->get($crawlId, $request->user()?->tenant_id);
         } catch (ServiceUnavailable) {
             return response()->json(['error' => 'crawl service unavailable'], 503);
         }
@@ -76,7 +78,7 @@ final class CrawlController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $crawls = $this->crawls->recent((int) $request->query('limit', '25'));
+            $crawls = $this->crawls->recent((int) $request->query('limit', '25'), $request->user()?->tenant_id);
         } catch (ServiceUnavailable) {
             return response()->json(['error' => 'crawl service unavailable'], 503);
         }

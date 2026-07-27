@@ -42,9 +42,11 @@ final class SerpServiceClient extends ServiceClient
      *
      * @throws ServiceUnavailable
      */
-    public function get(string $checkId): ?array
+    public function get(string $checkId, ?string $tenantId): ?array
     {
-        $response = $this->send(fn () => $this->request()->get("/v1/checks/{$checkId}"));
+        $response = $this->send(
+            fn () => $this->request()->get("/v1/checks/{$checkId}", $this->scopedTo($tenantId))
+        );
 
         if ($response->status() === 404) {
             return null;
@@ -58,9 +60,11 @@ final class SerpServiceClient extends ServiceClient
      *
      * @throws ServiceUnavailable
      */
-    public function recent(int $limit = 25): array
+    public function recent(int $limit, ?string $tenantId): array
     {
-        $response = $this->send(fn () => $this->request()->get('/v1/checks', ['limit' => $limit]));
+        $response = $this->send(fn () => $this->request()->get(
+            '/v1/checks', ['limit' => $limit] + $this->scopedTo($tenantId)
+        ));
 
         return $this->usable($response)->json();
     }

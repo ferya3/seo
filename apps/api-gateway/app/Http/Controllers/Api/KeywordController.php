@@ -53,10 +53,12 @@ final class KeywordController extends Controller
         return response()->json($accepted, 202);
     }
 
-    public function show(string $researchId): JsonResponse
+    public function show(Request $request, string $researchId): JsonResponse
     {
         try {
-            $research = $this->keywords->get($researchId);
+            // Scoped to the caller's tenant, so another account's id answers
+            // 404 rather than handing over their report.
+            $research = $this->keywords->get($researchId, $request->user()?->tenant_id);
         } catch (ServiceUnavailable) {
             return response()->json(['error' => 'keyword service unavailable'], 503);
         }
@@ -71,7 +73,7 @@ final class KeywordController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $research = $this->keywords->recent((int) $request->query('limit', '25'));
+            $research = $this->keywords->recent((int) $request->query('limit', '25'), $request->user()?->tenant_id);
         } catch (ServiceUnavailable) {
             return response()->json(['error' => 'keyword service unavailable'], 503);
         }

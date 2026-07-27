@@ -787,3 +787,54 @@ def test_the_worker_listens_for_the_event_it_publishes_itself():
     from agents.orchestrator import worker
 
     assert "workflow.completed" in worker.ROUTING_KEYS
+
+
+# ---------------------------------------------------------------- tenancy
+
+
+def provisioned(conn, name: str = "acme") -> str:
+    tenant = str(uuid.uuid4())
+    conn.execute("INSERT INTO tenants (id, name) VALUES (%s, %s)", (tenant, name))
+    return tenant
+
+
+def test_a_workflow_is_only_readable_by_the_tenant_that_owns_it(store, conn):
+    """The whole audit hangs off this id — score, keywords, rankings. Reads
+    carried no tenant at all, so one id read another account's entire report."""
+    mine, theirs = provisioned(conn, "mine"), provisioned(conn, "theirs")
+    workflow_id = str(uuid.uuid4())
+    engine.start(store, workflow_id, "site_audit", dict(AUDIT), tenant_id=mine)
+
+    assert store.get(workflow_id, tenant_id=mine) is not None
+    assert store.get(workflow_id, tenant_id=theirs) is None
+    assert store.get(workflow_id) is not None            # the worker's own read
+
+
+def test_the_workflow_list_is_one_tenants_only(store, conn):
+    mine, theirs = provisioned(conn, "mine"), provisioned(conn, "theirs")
+    engine.start(store, str(uuid.uuid4()), "site_audit", dict(AUDIT), tenant_id=theirs)
+    ours = str(uuid.uuid4())
+    engine.start(store, ours, "site_audit", dict(AUDIT), tenant_id=mine)
+
+    assert [w.workflow_id for w in store.recent(25, tenant_id=mine)] == [ours]
+    assert len(store.recent(25)) == 2
+
+
+def test_another_tenants_workflow_is_404_over_http(store, conn, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from agents.orchestrator import api
+
+    monkeypatch.setattr(api, "_store", store)
+    client = TestClient(api.app)
+
+    mine, theirs = provisioned(conn, "mine"), provisioned(conn, "theirs")
+    workflow_id = str(uuid.uuid4())
+    engine.start(store, workflow_id, "site_audit", dict(AUDIT), tenant_id=mine)
+
+    assert client.get(f"/v1/workflows/{workflow_id}",
+                      params={"tenant_id": mine}).status_code == 200
+    # 404 rather than 403: a 403 confirms the id belongs to someone.
+    assert client.get(f"/v1/workflows/{workflow_id}",
+                      params={"tenant_id": theirs}).status_code == 404
+    assert client.get("/v1/workflows", params={"tenant_id": theirs}).json() == []

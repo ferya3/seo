@@ -21,7 +21,7 @@ import json
 import threading
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Generic, TypeVar
@@ -81,6 +81,19 @@ class JobRecord:
     def to_dict(self) -> dict[str, Any]:
         return {**self.summary(), "result": self.result}
 
+    def to_storage(self) -> dict[str, Any]:
+        """What has to survive a restart — not the same thing as what an API
+        answers with.
+
+        Files used to be written from `to_dict`, which subclasses override to
+        shape their public payload. Every field they left out came back None on
+        the next read, `tenant_id` among them: the same record then answered
+        one way from memory and another way from disk, so a tenant's own list
+        emptied itself the moment the process restarted. `asdict` takes the
+        dataclass fields and cannot drift from them.
+        """
+        return asdict(self)
+
     @classmethod
     def from_dict(cls, raw: dict[str, Any]):
         """Tolerant of unknown keys so an older file still loads after a field
@@ -90,6 +103,20 @@ class JobRecord:
 
 
 R = TypeVar("R", bound=JobRecord)
+
+
+def owned(record: R | None, tenant_id: str | None) -> R | None:
+    """A record only exists for the tenant that owns it.
+
+    `tenant_id=None` means "do not filter", which is what a worker reading
+    back its own job wants. That default is safe here and unsafe at an HTTP
+    boundary, so every read endpoint passes the caller's tenant explicitly —
+    reads used to skip this entirely, and any id was enough to read any
+    tenant's report.
+    """
+    if record is None or tenant_id is None:
+        return record
+    return record if record.tenant_id == tenant_id else None
 
 
 class FileJobStore(Generic[R]):
@@ -127,7 +154,7 @@ class FileJobStore(Generic[R]):
         path = self._path(record.job_id)
         temp = path.with_suffix(".tmp")
         try:
-            temp.write_text(json.dumps(record.to_dict(), ensure_ascii=False), encoding="utf-8")
+            temp.write_text(json.dumps(record.to_storage(), ensure_ascii=False), encoding="utf-8")
             # Rename rather than write in place: a crash mid-write would
             # otherwise leave a truncated file that fails to parse on next boot.
             temp.replace(path)
@@ -152,19 +179,18 @@ class FileJobStore(Generic[R]):
         self._write(record)
         return record
 
-    def get(self, job_id: str) -> R | None:
+    def get(self, job_id: str, tenant_id: str | None = None) -> R | None:
         with self._lock:
             record = self._memory.get(job_id)
-        if record is not None:
-            return record
-        # Not in memory: another process may have written it, or this one
-        # restarted. Reading through to disk is what makes the API and the
-        # worker able to share a store.
-        record = self._read(job_id)
-        if record is not None:
-            with self._lock:
-                self._memory[job_id] = record
-        return record
+        if record is None:
+            # Not in memory: another process may have written it, or this one
+            # restarted. Reading through to disk is what makes the API and the
+            # worker able to share a store.
+            record = self._read(job_id)
+            if record is not None:
+                with self._lock:
+                    self._memory[job_id] = record
+        return owned(record, tenant_id)
 
     def update(self, job_id: str, **changes: Any) -> R:
         record = self.get(job_id)
@@ -190,15 +216,22 @@ class FileJobStore(Generic[R]):
     def fail(self, job_id: str, error: str, events: Sequence[PendingEvent] = ()) -> R:
         return self.update(job_id, status="failed", error=error)
 
-    def recent(self, limit: int = 25) -> list[R]:
+    def recent(self, limit: int = 25, tenant_id: str | None = None) -> list[R]:
         if not self.writable:
             with self._lock:
                 records = list(self._memory.values())
-            return sorted(records, key=lambda r: r.created_at, reverse=True)[:limit]
+            found = sorted(records, key=lambda r: r.created_at, reverse=True)
+        else:
+            paths = sorted(
+                self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+            )
+            # Read more than asked for and filter afterwards: taking the first
+            # `limit` files and then filtering would return three rows when a
+            # tenant has ten, because the others' rows ate the budget.
+            found = [self._read(p.stem) for p in paths[: limit * 20 if tenant_id else limit]]
 
-        paths = sorted(self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-        found = [self._read(p.stem) for p in paths[:limit]]
-        return [r for r in found if r is not None]
+        keep = [r for r in found if owned(r, tenant_id) is not None]
+        return keep[:limit]
 
     def count(self) -> int:
         if not self.writable:

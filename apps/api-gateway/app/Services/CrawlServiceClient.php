@@ -51,9 +51,11 @@ final class CrawlServiceClient extends ServiceClient
      *
      * @throws ServiceUnavailable
      */
-    public function get(string $crawlId): ?array
+    public function get(string $crawlId, ?string $tenantId): ?array
     {
-        $response = $this->send(fn () => $this->request()->get("/v1/crawls/{$crawlId}"));
+        $response = $this->send(
+            fn () => $this->request()->get("/v1/crawls/{$crawlId}", $this->scopedTo($tenantId))
+        );
 
         if ($response->status() === 404) {
             return null;
@@ -67,9 +69,11 @@ final class CrawlServiceClient extends ServiceClient
      *
      * @throws ServiceUnavailable
      */
-    public function recent(int $limit = 25): array
+    public function recent(int $limit, ?string $tenantId): array
     {
-        $response = $this->send(fn () => $this->request()->get('/v1/crawls', ['limit' => $limit]));
+        $response = $this->send(fn () => $this->request()->get(
+            '/v1/crawls', ['limit' => $limit] + $this->scopedTo($tenantId)
+        ));
 
         return $this->usable($response)->json();
     }
