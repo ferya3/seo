@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/serp.checked.json",
+  "title": "serp.checked",
+  "description": "A rank check finished. Carries the standings, not every result page — those stay behind result_url.",
+  "type": "object",
+  "required": ["check_id", "target_domain", "status", "result_url"],
+  "additionalProperties": false,
+  "properties": {
+    "check_id": {"type": "string", "format": "uuid"},
+    "target_domain": {"type": "string"},
+    "status": {"enum": ["completed", "failed"]},
+    "error": {"type": ["string", "null"]},
+    "keywords_checked": {"type": "integer", "minimum": 0},
+    "keywords_ranked": {"type": "integer", "minimum": 0},
+    "average_position": {"type": ["number", "null"]},
+    "top_competitors": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["domain", "outranks_on"],
+        "additionalProperties": false,
+        "properties": {
+          "domain": {"type": "string"},
+          "outranks_on": {"type": "integer"}
+        }
+      }
+    },
+    "opportunities": {
+      "type": "array",
+      "maxItems": 25,
+      "items": {
+        "type": "object",
+        "required": ["keyword", "opportunity"],
+        "additionalProperties": false,
+        "properties": {
+          "keyword": {"type": "string"},
+          "position": {"type": ["integer", "null"]},
+          "opportunity": {"type": "integer"}
+        }
+      }
+    },
+    "result_url": {"type": "string"}
+  }
+}

@@ -38,11 +38,12 @@ def plan(goal: str, inputs: dict[str, Any]) -> list[Step]:
 
 
 def _site_audit(inputs: dict[str, Any]) -> list[Step]:
-    """Crawl the site, then research keywords for it.
+    """Crawl the site, research keywords for it, then see where it ranks.
 
     Sequential rather than parallel, and that is the point of having an
-    orchestrator at all: the keyword step's seed can be filled in from what the
-    crawl found, so it cannot start until the crawl has finished.
+    orchestrator at all. Each step needs the one before it: the keyword seed
+    can be filled in from what the crawl found, and the rank check has nothing
+    to check until research has produced keywords.
     """
     start_url = (inputs.get("start_url") or "").strip()
     if not start_url:
@@ -65,7 +66,42 @@ def _site_audit(inputs: dict[str, Any]) -> list[Step]:
     return [
         Step(position=1, kind="crawl", params=crawl_params),
         Step(position=2, kind="keyword_research", params=research_params),
+        Step(position=3, kind="serp_check", params={
+            "lang": research_params["lang"],
+            "country": research_params["country"],
+            "top_keywords": int(inputs.get("track_keywords") or DEFAULT_TRACKED),
+        }),
     ]
+
+
+# How many researched keywords to check rankings for. Every one is a live
+# search request against a host that will start refusing if pushed, so this is
+# a rate-limit decision as much as a useful-report decision.
+DEFAULT_TRACKED = 10
+MAX_TRACKED = 50
+
+
+def keywords_to_track(research_result: dict[str, Any] | None, limit: int) -> list[str]:
+    """Pick what to rank-check from what research found.
+
+    The keyword step reports its top terms already ordered by opportunity, so
+    this takes the head of that list rather than re-deciding. Deduplicated
+    case-insensitively because "کفش ورزشی" and "کفش ورزشی " are one query and
+    two wasted requests.
+    """
+    keywords: list[str] = []
+    seen: set[str] = set()
+
+    for item in (research_result or {}).get("top_keywords", []):
+        term = (item.get("keyword") if isinstance(item, dict) else str(item) or "").strip()
+        if not term or term.casefold() in seen:
+            continue
+        seen.add(term.casefold())
+        keywords.append(term)
+        if len(keywords) >= max(1, min(limit, MAX_TRACKED)):
+            break
+
+    return keywords
 
 
 def resolve_seed(params: dict[str, Any], crawl_result: dict[str, Any] | None) -> str:
@@ -85,9 +121,14 @@ def resolve_seed(params: dict[str, Any], crawl_result: dict[str, Any] | None) ->
     return seed_from_domain(url)
 
 
+def domain_of(url: str) -> str:
+    """The host a rank check should look for, without www."""
+    host = urlparse(url if "//" in url else f"//{url}").hostname or ""
+    return re.sub(r"^www\.", "", host).lower()
+
+
 def seed_from_domain(url: str) -> str:
-    host = urlparse(url if "//" in url else f"//{url}").hostname or url
-    host = re.sub(r"^www\.", "", host)
+    host = domain_of(url) or url
     # Drop the public suffix: "example.com" and "example.co.uk" should both
     # research "example", not "example com".
     label = host.split(".")[0] if host else ""

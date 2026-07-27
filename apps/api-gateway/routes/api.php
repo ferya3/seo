@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CrawlController;
 use App\Http\Controllers\Api\KeywordController;
 use App\Http\Controllers\Api\ProjectController;
+use App\Http\Controllers\Api\SerpController;
 use App\Http\Controllers\Api\WorkflowController;
 use Illuminate\Support\Facades\Route;
 
@@ -43,6 +44,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->prefix('v1')->group(functio
     Route::post('/research', [KeywordController::class, 'store'])->middleware('throttle:crawls');
     Route::get('/research', [KeywordController::class, 'index']);
     Route::get('/research/{research}', [KeywordController::class, 'show']);
+
+    // Each keyword is a live search request, so this shares the tighter budget.
+    Route::post('/checks', [SerpController::class, 'store'])->middleware('throttle:crawls');
+    Route::get('/checks', [SerpController::class, 'index']);
+    Route::get('/checks/{check}', [SerpController::class, 'show']);
 
     // A workflow starts a crawl and a keyword study, so it shares the tighter
     // budget rather than the general one.

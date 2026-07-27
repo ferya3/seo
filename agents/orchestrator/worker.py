@@ -25,7 +25,13 @@ from . import api, engine  # noqa: E402
 
 log = logging.getLogger(__name__)
 QUEUE = "orchestrator.events"
-ROUTING_KEYS = ["workflow.requested", "crawl.completed", "keyword.researched"]
+
+# Derived, not written out. Keeping a second list here is how the SERP step got
+# added to the engine and not to the queue bindings: the orchestrator dispatched
+# the rank check, the service ran it, and the completion event went nowhere —
+# leaving the workflow in 'running' with nothing coming. A hand-maintained copy
+# of COMPLETIONS will drift again; this cannot.
+ROUTING_KEYS = ["workflow.requested", *sorted(engine.COMPLETIONS)]
 
 # Cheap guard against redelivery. The durable check is the step's status
 # transition; this just avoids doing the work twice in the common case.

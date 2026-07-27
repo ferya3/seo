@@ -4,21 +4,57 @@
   "title": "workflow.requested",
   "description": "Multi-step work has been asked for. Published by the gateway; consumed by the orchestrator, which plans it into steps and drives them.",
   "type": "object",
-  "required": ["workflow_id", "goal"],
+  "required": [
+    "workflow_id",
+    "goal"
+  ],
   "additionalProperties": false,
   "properties": {
-    "workflow_id": {"type": "string", "format": "uuid"},
-    "goal": {"enum": ["site_audit"]},
+    "workflow_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "goal": {
+      "enum": [
+        "site_audit"
+      ]
+    },
     "inputs": {
       "type": "object",
       "description": "What the goal needs. A site_audit needs a start_url; seed is optional and derived from the site when absent.",
       "properties": {
-        "start_url": {"type": "string", "format": "uri"},
-        "seed": {"type": "string", "maxLength": 200},
-        "max_pages": {"type": "integer", "minimum": 1, "maximum": 100000},
-        "max_depth": {"type": "integer", "minimum": 1, "maximum": 20},
-        "lang": {"type": "string", "maxLength": 10},
-        "country": {"type": "string", "maxLength": 5}
+        "start_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "seed": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "max_pages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "max_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "lang": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "country": {
+          "type": "string",
+          "maxLength": 5
+        },
+        "track_keywords": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "description": "How many researched keywords to rank-check. Each is a live search request."
+        }
       },
       "additionalProperties": false
     }

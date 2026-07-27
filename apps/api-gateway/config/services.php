@@ -16,6 +16,11 @@ return [
         'timeout' => (int) env('ORCHESTRATOR_TIMEOUT', 15),
     ],
 
+    'serp' => [
+        'url' => env('SERP_SERVICE_URL', 'http://serp-api:8000'),
+        'timeout' => (int) env('SERP_SERVICE_TIMEOUT', 15),
+    ],
+
     'crawl' => [
         'url' => env('CRAWL_SERVICE_URL', 'http://crawl-api:8000'),
         'timeout' => (int) env('CRAWL_SERVICE_TIMEOUT', 10),

@@ -33,6 +33,8 @@ final class WorkflowController extends Controller
             'seed' => ['sometimes', 'nullable', 'string', 'max:200'],
             'max_pages' => ['sometimes', 'integer', 'min:1', 'max:100000'],
             'max_depth' => ['sometimes', 'integer', 'min:1', 'max:20'],
+            // Each tracked keyword becomes a live search request downstream.
+            'track_keywords' => ['sometimes', 'integer', 'min:1', 'max:50'],
             'lang' => ['sometimes', 'string', 'max:10'],
             'country' => ['sometimes', 'string', 'max:5'],
         ]);

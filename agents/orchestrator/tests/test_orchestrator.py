@@ -74,8 +74,26 @@ def research_done(job_id: str, status: str = "completed", error: str | None = No
         "error": error,
         "total": 128,
         "cluster_count": 4,
-        "top_keywords": [],
+        "top_keywords": [
+            {"keyword": "کفش ورزشی", "demand": 80, "opportunity": 70, "intent": "commercial"},
+            {"keyword": "کفش مردانه", "demand": 60, "opportunity": 65, "intent": "commercial"},
+        ],
         "result_url": f"/v1/research/{job_id}",
+    }
+
+
+def serp_done(job_id: str, status: str = "completed", error: str | None = None) -> dict:
+    return {
+        "check_id": job_id,
+        "target_domain": "example.com",
+        "status": status,
+        "error": error,
+        "keywords_checked": 3,
+        "keywords_ranked": 2,
+        "average_position": 3.5,
+        "top_competitors": [{"domain": "rival.com", "outranks_on": 2}],
+        "opportunities": [{"keyword": "کفش", "position": None, "opportunity": 100}],
+        "result_url": f"/v1/checks/{job_id}",
     }
 
 
@@ -88,9 +106,11 @@ def started(store, inputs=None) -> str:
 # --------------------------------------------------------------------- planner
 
 
-def test_a_site_audit_crawls_then_researches():
+def test_a_site_audit_crawls_then_researches_then_checks_rankings():
     steps = planner.plan("site_audit", AUDIT)
-    assert [(s.position, s.kind) for s in steps] == [(1, "crawl"), (2, "keyword_research")]
+    assert [(s.position, s.kind) for s in steps] == [
+        (1, "crawl"), (2, "keyword_research"), (3, "serp_check")
+    ]
 
 
 def test_an_unknown_goal_is_refused():
@@ -129,7 +149,7 @@ def test_starting_dispatches_only_the_first_step(store, conn):
     workflow = store.get(workflow_id)
 
     assert workflow.status == "running"
-    assert [s.status for s in workflow.steps] == ["dispatched", "pending"]
+    assert [s.status for s in workflow.steps] == ["dispatched", "pending", "pending"]
 
     # The second step must not have been asked for yet.
     types = [r[0] for r in conn.execute("SELECT event_type FROM outbox ORDER BY id").fetchall()]
@@ -161,7 +181,7 @@ def test_finishing_a_step_dispatches_the_next(store, conn):
     engine.on_completion(store, "crawl.completed", crawl_done(crawl_step.job_id))
 
     workflow = store.get(workflow_id)
-    assert [s.status for s in workflow.steps] == ["completed", "dispatched"]
+    assert [s.status for s in workflow.steps] == ["completed", "dispatched", "pending"]
     types = [r[0] for r in conn.execute("SELECT event_type FROM outbox ORDER BY id").fetchall()]
     assert types == ["crawl.requested", "keyword.research_requested"]
 
@@ -192,11 +212,13 @@ def test_the_last_step_completes_the_workflow(store):
 
     engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
     engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
+    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
 
     workflow = store.get(workflow_id)
     assert workflow.status == "completed"
     assert workflow.report["headline"] == {
         "overall_score": 73, "total_issues": 9, "keywords_found": 128,
+        "keywords_ranked": 2, "average_position": 3.5,
     }
 
 
@@ -205,13 +227,14 @@ def test_completion_emits_a_contract_valid_event(store, conn):
     steps = store.get(workflow_id).steps
     engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
     engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
+    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
 
     payload = conn.execute(
         "SELECT payload FROM outbox WHERE event_type='workflow.completed'"
     ).fetchone()[0]
     validate_event("workflow.completed", payload)
     assert payload["status"] == "completed"
-    assert [s["status"] for s in payload["steps"]] == ["completed", "completed"]
+    assert [s["status"] for s in payload["steps"]] == ["completed"] * 3
 
 
 def test_the_report_links_to_results_rather_than_copying_them(store):
@@ -221,6 +244,7 @@ def test_the_report_links_to_results_rather_than_copying_them(store):
     steps = store.get(workflow_id).steps
     engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
     engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
+    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
 
     report = store.get(workflow_id).report
     assert report["crawl"]["result_url"] == f"/v1/crawls/{steps[0].job_id}"
@@ -342,6 +366,7 @@ def test_advancing_a_finished_workflow_does_nothing(store, conn):
     steps = store.get(workflow_id).steps
     engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
     engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
+    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
 
     before = conn.execute("SELECT count(*) FROM outbox").fetchone()[0]
     engine.advance(store, workflow_id)
@@ -387,7 +412,7 @@ def test_the_worker_ignores_a_workflow_it_already_started(store, monkeypatch):
 
     with psycopg.connect(DSN, autocommit=True) as c:
         assert c.execute("SELECT count(*) FROM workflow_steps WHERE workflow_id = %s",
-                         (workflow_id,)).fetchone()[0] == 2
+                         (workflow_id,)).fetchone()[0] == 3
 
 
 def test_the_worker_dead_letters_a_malformed_request(store, monkeypatch):
@@ -416,7 +441,9 @@ def test_the_worker_advances_on_a_completion_event(store, monkeypatch):
         type="crawl.completed", payload=crawl_done(step.job_id), producer="crawl-service"
     ))
 
-    assert [s.status for s in store.get(workflow_id).steps] == ["completed", "dispatched"]
+    assert [s.status for s in store.get(workflow_id).steps] == [
+        "completed", "dispatched", "pending"
+    ]
 
 
 # -------------------------------------------------------------------- the api
@@ -449,7 +476,7 @@ def test_the_api_runs_a_workflow_end_to_end(store, monkeypatch):
 
     body = client.get(f"/v1/workflows/{workflow_id}").json()
     assert body["status"] == "running"
-    assert [s["kind"] for s in body["steps"]] == ["crawl", "keyword_research"]
+    assert [s["kind"] for s in body["steps"]] == ["crawl", "keyword_research", "serp_check"]
 
     assert any(w["workflow_id"] == workflow_id for w in client.get("/v1/workflows").json())
 
@@ -461,3 +488,166 @@ def test_an_unknown_workflow_is_404(store, monkeypatch):
 
     monkeypatch.setattr(api, "_store", store)
     assert TestClient(api.app).get(f"/v1/workflows/{uuid.uuid4()}").status_code == 404
+
+
+# ------------------------------------------------------- the rank-check step
+
+
+def test_what_to_rank_check_comes_from_what_research_found(store, conn):
+    """The strongest data dependency in the plan: this step cannot be built
+    until the step before it has reported, which is the whole reason the
+    workflow is sequential."""
+    workflow_id = started(store)
+    steps = store.get(workflow_id).steps
+    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
+    engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
+
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE event_type='serp.check_requested'"
+    ).fetchone()[0]
+    assert payload["keywords"] == ["کفش ورزشی", "کفش مردانه"]
+    assert payload["target_domain"] == "example.com"
+    validate_event("serp.check_requested", payload)
+
+
+def test_the_tracked_keyword_count_is_capped(store, conn):
+    """Every tracked keyword is a live search request against a host that will
+    start refusing, so this is a rate-limit decision as much as a report one."""
+    workflow_id = started(store, {**AUDIT, "track_keywords": 3})
+    steps = store.get(workflow_id).steps
+    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
+
+    result = research_done(steps[1].job_id)
+    result["top_keywords"] = [
+        {"keyword": f"کلمه {n}", "demand": 10, "opportunity": 10, "intent": "informational"}
+        for n in range(20)
+    ]
+    engine.on_completion(store, "keyword.researched", result)
+
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE event_type='serp.check_requested'"
+    ).fetchone()[0]
+    assert len(payload["keywords"]) == 3
+
+
+def test_duplicate_keywords_are_not_checked_twice():
+    research = {"top_keywords": [
+        {"keyword": "کفش ورزشی"}, {"keyword": "کفش ورزشی "}, {"keyword": "کفش مردانه"},
+    ]}
+    assert planner.keywords_to_track(research, 10) == ["کفش ورزشی", "کفش مردانه"]
+
+
+def test_research_finding_nothing_skips_the_check_rather_than_failing(store, conn):
+    """A site with no keywords is a real answer about that site. Failing the
+    workflow would report it as a system fault and throw away the crawl."""
+    workflow_id = started(store)
+    steps = store.get(workflow_id).steps
+    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
+
+    empty = research_done(steps[1].job_id)
+    empty["top_keywords"] = []
+    empty["total"] = 0
+    engine.on_completion(store, "keyword.researched", empty)
+
+    workflow = store.get(workflow_id)
+    assert workflow.status == "completed"
+    assert [s.status for s in workflow.steps] == ["completed", "completed", "skipped"]
+    # The crawl's findings survive.
+    assert workflow.report["headline"]["overall_score"] == 73
+
+    types = [r[0] for r in conn.execute("SELECT event_type FROM outbox ORDER BY id").fetchall()]
+    assert "serp.check_requested" not in types
+
+
+def test_a_skipped_step_is_reported_as_skipped_not_failed(store, conn):
+    workflow_id = started(store)
+    steps = store.get(workflow_id).steps
+    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
+    empty = research_done(steps[1].job_id)
+    empty["top_keywords"] = []
+    engine.on_completion(store, "keyword.researched", empty)
+
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE event_type='workflow.completed'"
+    ).fetchone()[0]
+    validate_event("workflow.completed", payload)
+    assert payload["status"] == "completed"
+    assert payload["steps"][2]["status"] == "skipped"
+
+
+def test_a_failed_rank_check_fails_the_workflow(store):
+    workflow_id = started(store)
+    steps = store.get(workflow_id).steps
+    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
+    engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
+    engine.on_completion(
+        store, "serp.checked", serp_done(steps[2].job_id, "failed", "ProviderError: blocked")
+    )
+
+    workflow = store.get(workflow_id)
+    assert workflow.status == "failed"
+    assert "blocked" in workflow.error
+
+
+def test_the_rankings_reach_the_final_report(store):
+    workflow_id = started(store)
+    steps = store.get(workflow_id).steps
+    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
+    engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
+    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
+
+    report = store.get(workflow_id).report
+    assert report["rankings"]["average_position"] == 3.5
+    assert report["rankings"]["top_competitors"][0]["domain"] == "rival.com"
+    assert report["rankings"]["result_url"] == f"/v1/checks/{steps[2].job_id}"
+
+
+def test_the_worker_listens_for_every_completion_the_engine_handles():
+    """Found by running it, not by a test: serp.checked was added to the engine
+    and not to the queue bindings, so the rank check ran and its completion
+    event went nowhere — the workflow sat in 'running' forever."""
+    from agents.orchestrator import worker
+
+    missing = set(engine.COMPLETIONS) - set(worker.ROUTING_KEYS)
+    assert missing == set()
+
+
+def test_an_unknown_input_is_refused_rather_than_dropped(store, monkeypatch):
+    """Found by running it: track_keywords was missing from the request model,
+    so a caller could set it, watch ten keywords get checked instead of five,
+    and have nothing to tell them why. Pydantic ignores unknown fields by
+    default; here it must not."""
+    from fastapi.testclient import TestClient
+
+    from agents.orchestrator import api
+
+    monkeypatch.setattr(api, "_store", store)
+    client = TestClient(api.app)
+
+    assert client.post("/v1/workflows", json={
+        "goal": "site_audit",
+        "inputs": {"start_url": "https://example.com", "trak_keywords": 5},
+    }).status_code == 422
+
+
+def test_the_tracked_count_reaches_the_plan(store, conn, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from agents.orchestrator import api
+
+    monkeypatch.setattr(api, "_store", store)
+    client = TestClient(api.app)
+
+    workflow_id = client.post("/v1/workflows", json={
+        "goal": "site_audit",
+        "inputs": {"start_url": "https://example.com", "seed": "کفش", "track_keywords": 2},
+    }).json()["workflow_id"]
+
+    steps = store.get(workflow_id).steps
+    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
+    engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
+
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE event_type='serp.check_requested'"
+    ).fetchone()[0]
+    assert len(payload["keywords"]) == 2

@@ -9,19 +9,20 @@
 | بخش | وضعیت | توضیح |
 | --- | --- | --- |
 | موتور سئو (`services/engine`) | ✅ کار می‌کند، ۱۵۶ تست | خزش، ۴۰+ قانون، امتیازدهی، تحقیق کلمات کلیدی، داشبورد |
-| قراردادها (`shared/contracts`) | ✅ کار می‌کند | envelope + ۷ رویداد، با اعتبارسنجی JSON Schema |
+| قراردادها (`shared/contracts`) | ✅ کار می‌کند | envelope + ۹ رویداد، با اعتبارسنجی JSON Schema |
 | باس رویداد (`shared/events`) | ✅ کار می‌کند، روی RabbitMQ 3.12 واقعی تست شد | publisher/consumer با publisher confirms؛ مسیر dead-letter هم اجرا شد: هندلری که خطا داد دقیقاً یک‌بار صدا زده شد و پیام در `.dlq` نشست، نه در حلقه‌ی بی‌نهایت |
 | ذخیره‌سازی فایلی (`shared/store.py`) | ✅ کار می‌کند | `FileJobStore` عمومی — حالت بدون دیتابیس، همان چیزی که نصب تک‌ماشینه استفاده می‌کند |
 | ذخیره‌سازی Postgres + outbox (`shared/db.py`) | ✅ کار می‌کند، ۲۷ تست روی Postgres 16 واقعی | همان اینترفیس `FileJobStore`، به‌علاوه نوشتن وضعیت و رویداد در **یک تراکنش** |
 | رله outbox (`shared/relay.py`) | ✅ کار می‌کند، مسیر کامل روی Postgres + RabbitMQ واقعی اجرا شد | outbox → بروکر → مصرف‌کننده؛ `event_id` استیج‌شده تا انتهای مسیر همان می‌ماند |
 | سرویس Crawl (`services/crawl`) | ✅ کار می‌کند، ۲۱ تست | API با FastAPI + ورکر باس، هر دو روی یک `run_crawl` |
 | سرویس Keyword (`services/keyword`) | ✅ کار می‌کند، ۲۳ تست | API با FastAPI + ورکر باس، هر دو روی یک `run_research` |
-| اسکیمای دیتابیس (`infra/db`) | ✅ روی Postgres 16 واقعی اجرا شد | هر چهار مهاجرت روی دیتابیس خالی از صفر اعمال شدند، بدون خطا |
+| سرویس SERP (`services/serp`) | ⚠️ منطق ✅ (۴۱ تست)، **fetch تأییدنشده** | رتبه‌یابی، رقبا، اولویت‌بندی — همه تست‌شده؛ ولی provider اینجا اجرا نشد چون همه‌ی موتورهای جستجو بلاک‌اند |
+| اسکیمای دیتابیس (`infra/db`) | ✅ روی Postgres 16 واقعی اجرا شد | هر پنج مهاجرت روی دیتابیس خالی از صفر اعمال شدند، بدون خطا |
 | docker-compose | ⚠️ نوشته شده، اجرا نشده | Postgres، Redis، RabbitMQ، Qdrant، Meilisearch، MinIO + سرویس‌های ما و گیت‌وی (اینجا داکر دیمن نبود) |
-| API Gateway (`apps/api-gateway`) | ✅ کار می‌کند، ۸۴ تست روی Postgres واقعی | Laravel 13 روی PHP 8.4؛ Sanctum، تنانسی از توکن، rate limit، ترجمه‌ی خطای سرویس‌ها |
+| API Gateway (`apps/api-gateway`) | ✅ کار می‌کند، ۹۷ تست روی Postgres واقعی | Laravel 13 روی PHP 8.4؛ Sanctum، تنانسی از توکن، rate limit، ترجمه‌ی خطای سرویس‌ها |
 | Auth و Projects | ✅ کار می‌کند | ثبت‌نام/ورود/خروج + CRUD پروژه، همان جدول‌های `tenants`/`users`/`projects` که سرویس‌ها به آن‌ها FK دارند |
-| Orchestrator (`agents/orchestrator`) | ✅ کار می‌کند، ۳۱ تست روی Postgres واقعی | اولین **مصرف‌کننده‌ی** رویدادها؛ حلقه‌ی کامل روی RabbitMQ و Postgres واقعی اجرا شد |
-| بقیه سرویس‌ها و ایجنت‌ها | ❌ شروع نشده | SERP، Content، Optimizer، Internal Links، Competitor، Rank، GSC |
+| Orchestrator (`agents/orchestrator`) | ✅ کار می‌کند، ۴۱ تست روی Postgres واقعی | گردش‌کار سه‌مرحله‌ای؛ حلقه‌ی کامل روی RabbitMQ و Postgres واقعی اجرا شد |
+| بقیه سرویس‌ها و ایجنت‌ها | ❌ شروع نشده | Content، Optimizer، Internal Links، Competitor، GSC، Backlinks |
 | Frontend (Nuxt) | ❌ شروع نشده | داشبورد فعلی همان Flask داخل موتور است |
 | k8s / terraform / monitoring | ❌ شروع نشده | |
 
@@ -43,7 +44,7 @@
 بدون دیتابیس، تست‌های Postgres skip می‌شوند و بقیه کار می‌کنند:
 
 ```bash
-pytest                       # ۲۰۰ پاس، ۵۸ skip
+pytest                       # ۲۴۱ پاس، ۶۸ skip
 ```
 
 با دیتابیس واقعی:
@@ -51,7 +52,7 @@ pytest                       # ۲۰۰ پاس، ۵۸ skip
 ```bash
 createdb seo
 for f in infra/db/migrations/*.sql; do psql -d seo -f "$f"; done
-TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo pytest    # ۲۵۸ تست
+TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo pytest    # ۳۰۹ تست
 ```
 
 `shared/tests` عمداً با فیک اجرا نمی‌شود: ارزش این ذخیره‌ساز اتمی بودن تراکنش
@@ -186,6 +187,34 @@ Orchestrator بدون هیچ API key کار کند، همان تصمیمی که 
 هماهنگ می‌کند و «وضعیت را در همین پروسه نگه دار» حالتی نیست که بشود صادقانه
 پیشنهاد داد. نبود `DATABASE_URL` خطای بالا آمدن است، نه تنزل بی‌صدا.
 
+**مرز چیزی که تأیید نشده، صریح است.** همه‌ی موتورهای جستجو از این محیط بلاک
+هستند، پس `services/serp/providers.py` اجرا نشده. به‌جای پنهان کردنش، fetch
+پشت یک اینترفیس جدا شد: سطح تأییدنشده یک تابع است، و هر چیزی که نتیجه را
+مصرف می‌کند — رتبه‌یابی، رقبا، اولویت‌بندی، ذخیره‌سازی، رویدادها، هماهنگی —
+روی داده‌ای با شکل معلوم تست شده. تست parser روی fixture دست‌نویس اجرا می‌شود
+و خودش می‌گوید که «شکل را پوشش می‌دهد، نه اینکه شکل امروزی است».
+
+**عدد تخمینی به‌عنوان پیش‌بینی گزارش نمی‌شود.** جدول CTR فقط برای مرتب کردن
+فرصت‌ها نسبت به هم استفاده می‌شود، نه پیش‌بینی ترافیک. یک تخمین که لباس
+پیش‌بینی بپوشد از نداشتن عدد بدتر است.
+
+**«رتبه ندارد» با «رتبه صفر» یکی نیست.** ستون `position` می‌تواند NULL باشد و
+میانگین رتبه کلمات بدون رتبه را کنار می‌گذارد. اگر عدد بزرگی به‌جایش گذاشته
+می‌شد، داده‌ای ساخته بودیم که وجود ندارد.
+
+**زیردامنه خودی است، دامنه‌ی شبیه نه.** `blog.example.com` با
+`example.com` یکی حساب می‌شود ولی `notexample.com` نه — تطبیق پسوندی خالی
+رتبه‌ی رقیب را به اسم خودت گزارش می‌کرد.
+
+**مرحله‌ی سوم واقعاً به مرحله‌ی دوم وابسته است.** چیزی که رتبه‌اش چک می‌شود
+همان کلماتی است که تحقیق پیدا کرده، پس این مرحله را نمی‌شود از قبل برنامه‌ریزی
+کرد. این قوی‌ترین دلیل وجود Orchestrator در کل سیستم است.
+
+**«چیزی برای انجام نیست» با «خراب شد» فرق دارد.** اگر تحقیق هیچ کلمه‌ای پیدا
+نکند، مرحله‌ی SERP `skipped` می‌شود و گردش‌کار `completed` — نه `failed`.
+سایتی که کلمه‌ای ندارد یک جواب واقعی درباره‌ی آن سایت است؛ شکست دادن
+گردش‌کار یعنی دور ریختن نتیجه‌ی خزش هم.
+
 **بازگشت به فایل، بی‌صدا نیست.** اگر `DATABASE_URL` ست باشد ولی دیتابیس در
 دسترس نباشد، سرویس بالا می‌آید و روی فایل کار می‌کند — ولی با لاگ سطح خطا.
 نصب تک‌ماشینه‌ی توی README دیتابیس ندارد و باید کار کند؛ ولی از دست دادن
@@ -202,7 +231,7 @@ for f in infra/db/migrations/*.sql; do psql -d seo -f "$f"; done
 cd apps/api-gateway
 composer install
 cp .env.example .env && php artisan key:generate     # DB_URL و REDIS_HOST را تنظیم کن
-TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo php artisan test   # ۷۱ تست
+TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo php artisan test   # ۹۷ تست
 php artisan serve
 ```
 
@@ -242,13 +271,20 @@ crawl.completed             crawl-service
 page.updated  ×۲            crawl-service
 keyword.research_requested  orchestrator      ← فقط بعد از تمام شدن خزش
 keyword.researched          keyword-service
+serp.check_requested        orchestrator      ← کلماتش از نتیجه‌ی مرحله‌ی قبل
+serp.checked                serp-service
 workflow.completed          orchestrator
 ```
+
+گزارش نهایی: امتیاز ۴۵ روی ۲ صفحه با ۱۶ ایراد، ۲۰۰ کلمه‌ی کلیدی در ۱۲ خوشه،
+۱۰ کلمه رتبه‌یابی‌شده با میانگین رتبه‌ی ۳. (مرحله‌ی SERP با provider جایگزین
+اجرا شد، چون موتورهای جستجو از اینجا بلاک‌اند.)
 
 ## قدم بعدی
 
 ۱. بالا آوردن docker-compose به‌صورت کامل (اینجا داکر دیمن نبود؛ همه‌ی اجزا
    تک‌تک روی Postgres، RabbitMQ و Redis واقعی اجرا شدند، ولی نه از طریق compose)
-۲. سرویس بعدی: SERP — و اضافه کردنش به planner به‌عنوان مرحله‌ی سوم
+۲. تأیید provider سرویس SERP روی شبکه‌ای که موتور جستجو را بلاک نمی‌کند
+   (`python -m services.serp.providers "کلمه"`)، یا وصل کردن یک API پولی
 ۳. لایه‌ی مدل زبانی: پر کردن پارامترهای plan و خلاصه‌ی نهایی
 ۴. Frontend

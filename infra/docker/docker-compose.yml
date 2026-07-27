@@ -163,6 +163,43 @@ services:
       postgres: {condition: service_healthy}
     restart: on-failure
 
+  serp-api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/serp.Dockerfile
+    command: ["uvicorn", "services.serp.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      SERP_DATA_DIR: /var/lib/seoagent/serp
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+    ports: ["127.0.0.1:8004:8000"]
+    volumes:
+      - serp-data:/var/lib/seoagent/serp
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  serp-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/serp.Dockerfile
+    command: ["python", "-m", "services.serp.worker"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      SERP_DATA_DIR: /var/lib/seoagent/serp
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+    volumes:
+      - serp-data:/var/lib/seoagent/serp
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    restart: on-failure
+
   orchestrator-api:
     build:
       context: ../..
@@ -214,6 +251,7 @@ services:
       CRAWL_SERVICE_URL: http://crawl-api:8000
       KEYWORD_SERVICE_URL: http://keyword-api:8000
       ORCHESTRATOR_URL: http://orchestrator-api:8000
+      SERP_SERVICE_URL: http://serp-api:8000
     ports: ["127.0.0.1:8000:8000"]
     depends_on:
       postgres: {condition: service_healthy}
@@ -244,3 +282,4 @@ volumes:
   minio-data:
   crawl-data:
   keyword-data:
+  serp-data:

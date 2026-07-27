@@ -37,6 +37,7 @@ SERVICE = "orchestrator"
 COMPLETIONS = {
     "crawl.completed": ("crawl", "crawl_id"),
     "keyword.researched": ("keyword_research", "research_id"),
+    "serp.checked": ("serp_check", "check_id"),
 }
 
 
@@ -105,6 +106,21 @@ def advance(store: WorkflowStore, workflow_id: str) -> None:
 
         try:
             event = _dispatch_event(workflow, step)
+        except NoWorkToDo as reason:
+            # Nothing to do is an answer, not a fault. The step is marked
+            # skipped and the workflow carries on to whatever comes next.
+            log.info("workflow %s skipping step %s: %s", workflow_id, step.position, reason)
+            store.skip_step(step.job_id, str(reason), conn=conn)
+            workflow = store.load(conn, workflow_id)
+            step = workflow.next_pending()
+            if step is None:
+                _finish(store, conn, workflow, "completed", None)
+                return
+            try:
+                event = _dispatch_event(workflow, step)
+            except Exception as exc:
+                _finish(store, conn, workflow, "failed", f"{type(exc).__name__}: {exc}")
+                return
         except Exception as exc:
             log.exception("workflow %s could not dispatch step %s", workflow_id, step.position)
             _finish(store, conn, workflow, "failed", f"{type(exc).__name__}: {exc}")
@@ -125,6 +141,9 @@ def _dispatch_event(workflow: Workflow, step) -> PendingEvent:
     elif step.kind == "keyword_research":
         event_type = "keyword.research_requested"
         payload = {"research_id": step.job_id, **_research_params(workflow)}
+    elif step.kind == "serp_check":
+        event_type = "serp.check_requested"
+        payload = {"check_id": step.job_id, **_serp_params(workflow)}
     else:                                             # pragma: no cover - guarded by the schema
         raise ValueError(f"unknown step kind {step.kind!r}")
 
@@ -164,6 +183,36 @@ def _research_params(workflow: Workflow) -> dict[str, Any]:
         "lang": workflow.inputs.get("lang", "fa"),
         "country": workflow.inputs.get("country", "IR"),
     }
+
+
+def _serp_params(workflow: Workflow) -> dict[str, Any]:
+    """The step with a real data dependency: what to rank-check is whatever
+    research turned up, so this cannot be planned in advance."""
+    research = next(
+        (s.result for s in workflow.steps if s.kind == "keyword_research" and s.result), None
+    )
+    limit = int(workflow.inputs.get("track_keywords") or planner.DEFAULT_TRACKED)
+    keywords = planner.keywords_to_track(research, limit)
+    if not keywords:
+        # Research finding nothing is not a workflow failure — it is a real
+        # answer about a site. Raising here would turn "no keywords" into
+        # "everything broke".
+        raise NoWorkToDo("research produced no keywords to rank-check")
+
+    domain = planner.domain_of(workflow.inputs.get("start_url", ""))
+    if not domain:
+        raise ValueError("could not work out which domain to rank-check")
+
+    return {
+        "target_domain": domain,
+        "keywords": keywords,
+        "lang": workflow.inputs.get("lang", "fa"),
+        "country": workflow.inputs.get("country", "IR"),
+    }
+
+
+class NoWorkToDo(Exception):
+    """A step has nothing to act on. The workflow finishes, it does not fail."""
 
 
 def _finish(
@@ -212,10 +261,12 @@ def _report(workflow: Workflow, status: str, error: str | None) -> dict[str, Any
     copying it in here would duplicate megabytes into a second table that has
     no way to stay in step with the first.
     """
-    crawl = next((s.result for s in workflow.steps if s.kind == "crawl" and s.result), None) or {}
-    research = next(
-        (s.result for s in workflow.steps if s.kind == "keyword_research" and s.result), None
-    ) or {}
+    def result_of(kind: str) -> dict[str, Any]:
+        return next((s.result for s in workflow.steps if s.kind == kind and s.result), None) or {}
+
+    crawl = result_of("crawl")
+    research = result_of("keyword_research")
+    serp = result_of("serp_check")
 
     return {
         "goal": workflow.goal,
@@ -225,9 +276,12 @@ def _report(workflow: Workflow, status: str, error: str | None) -> dict[str, Any
             "overall_score": crawl.get("overall_score"),
             "total_issues": crawl.get("total_issues"),
             "keywords_found": research.get("total"),
+            "keywords_ranked": serp.get("keywords_ranked"),
+            "average_position": serp.get("average_position"),
         },
         "crawl": crawl,
         "keywords": research,
+        "rankings": serp,
     }
 
 
@@ -244,12 +298,25 @@ def _step_result(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             "pages_crawled": stats.get("pages_crawled"),
             "result_url": payload.get("result_url"),
         }
+    if kind == "keyword_research":
+        return {
+            "research_id": payload.get("research_id"),
+            "seed": payload.get("seed"),
+            "total": payload.get("total"),
+            "cluster_count": payload.get("cluster_count"),
+            # Kept rather than trimmed to a headline: the next step reads this
+            # to decide what to rank-check.
+            "top_keywords": payload.get("top_keywords", [])[:25],
+            "result_url": payload.get("result_url"),
+        }
     return {
-        "research_id": payload.get("research_id"),
-        "seed": payload.get("seed"),
-        "total": payload.get("total"),
-        "cluster_count": payload.get("cluster_count"),
-        "top_keywords": payload.get("top_keywords", [])[:10],
+        "check_id": payload.get("check_id"),
+        "target_domain": payload.get("target_domain"),
+        "keywords_checked": payload.get("keywords_checked"),
+        "keywords_ranked": payload.get("keywords_ranked"),
+        "average_position": payload.get("average_position"),
+        "top_competitors": payload.get("top_competitors", [])[:5],
+        "opportunities": payload.get("opportunities", [])[:10],
         "result_url": payload.get("result_url"),
     }
 

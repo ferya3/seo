@@ -20,14 +20,14 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from shared.db import UnknownTenant  # noqa: E402
 
-from . import engine  # noqa: E402
+from . import engine, planner  # noqa: E402
 from .planner import UnknownGoal  # noqa: E402
 from .store import WorkflowStore  # noqa: E402
 
@@ -69,10 +69,20 @@ app = FastAPI(
 
 
 class WorkflowInputs(BaseModel):
+    # Extra fields are refused rather than dropped. Pydantic's default is to
+    # ignore what it does not recognise, which meant a caller could pass
+    # track_keywords, watch it silently do nothing, and have no way to tell.
+    # It also keeps this model and the workflow.requested contract, which sets
+    # additionalProperties: false, from disagreeing.
+    model_config = ConfigDict(extra="forbid")
+
     start_url: str = Field(min_length=1, max_length=2048)
     seed: str | None = Field(default=None, max_length=200)
     max_pages: int | None = Field(default=None, ge=1, le=100_000)
     max_depth: int | None = Field(default=None, ge=1, le=20)
+    # How many researched keywords to rank-check. Each one is a live search
+    # request, so the ceiling is a rate-limit decision.
+    track_keywords: int | None = Field(default=None, ge=1, le=planner.MAX_TRACKED)
     lang: str = "fa"
     country: str = "IR"
 

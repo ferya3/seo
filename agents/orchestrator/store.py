@@ -152,6 +152,17 @@ class WorkflowStore:
             ).fetchone()
         return str(row[0]) if row else None
 
+    def skip_step(self, job_id: str, reason: str, conn=None) -> None:
+        """A step with nothing to act on. Distinct from failed on purpose: the
+        report should say "there was nothing to check", not "this broke"."""
+        sql = ("UPDATE workflow_steps SET status = 'skipped', error = %s, updated_at = now() "
+               "WHERE job_id = %s AND status = 'pending'")
+        if conn is not None:
+            conn.execute(sql, (reason, job_id))
+            return
+        with self.pool.connection() as own:
+            own.execute(sql, (reason, job_id))
+
     def mark_dispatched(self, job_id: str, conn=None) -> None:
         sql = ("UPDATE workflow_steps SET status = 'dispatched', updated_at = now() "
                "WHERE job_id = %s AND status = 'pending'")
