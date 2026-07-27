@@ -20,7 +20,15 @@ FIXTURES = Path(__file__).parent / "fixtures"
 def allow_local_fixture_sites():
     """The fixture sites live on 127.0.0.1, which the SSRF guard blocks by
     default. Opt in for the whole suite; `test_security.py` unsets it again to
-    exercise the guard itself."""
+    exercise the guard itself.
+
+    Session-scoped by necessity — the fixture sites are themselves session
+    fixtures and are crawled before any per-test fixture runs — which means
+    this flag is set process-wide for the rest of the run. Any test elsewhere
+    that asserts the guard's behaviour has to unset it itself; the
+    notification service's tests do exactly that, after one of them passed
+    alone and failed in the full suite.
+    """
     os.environ["SEO_AGENT_ALLOW_PRIVATE"] = "1"
     yield
     os.environ.pop("SEO_AGENT_ALLOW_PRIVATE", None)

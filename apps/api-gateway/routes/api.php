@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CrawlController;
 use App\Http\Controllers\Api\KeywordController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SerpController;
@@ -50,6 +51,13 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->prefix('v1')->group(functio
     Route::post('/checks', [SerpController::class, 'store'])->middleware('throttle:crawls');
     Route::get('/checks', [SerpController::class, 'index']);
     Route::get('/checks/{check}', [SerpController::class, 'show']);
+
+    // Who gets told. Configuration, so no throttle beyond the general one.
+    Route::post('/notification-channels', [NotificationController::class, 'store']);
+    Route::get('/notification-channels', [NotificationController::class, 'index']);
+    Route::delete('/notification-channels/{channel}', [NotificationController::class, 'destroy']);
+    Route::post('/notification-channels/{channel}/test', [NotificationController::class, 'test']);
+    Route::get('/notification-deliveries', [NotificationController::class, 'deliveries']);
 
     // Rendering a document is cheap and read-only: the general budget.
     Route::post('/reports', [ReportController::class, 'store']);

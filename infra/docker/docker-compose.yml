@@ -367,6 +367,47 @@ services:
       postgres: {condition: service_healthy}
     restart: on-failure
 
+  notifications-api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/notifications.Dockerfile
+    command: ["uvicorn", "services.notifications.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+      # Where a link in a notification should point: the gateway, because the
+      # recipient is a person with a browser.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080/api}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-25}
+      SMTP_FROM: ${SMTP_FROM:-seo-agent@localhost}
+    ports: ["127.0.0.1:8009:8000"]
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  notifications-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/notifications.Dockerfile
+    command: ["python", "-m", "services.notifications.worker"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080/api}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-25}
+      SMTP_FROM: ${SMTP_FROM:-seo-agent@localhost}
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    restart: on-failure
+
   orchestrator-api:
     build:
       context: ../..

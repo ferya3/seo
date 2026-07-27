@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Services\CrawlServiceClient;
 use App\Services\KeywordServiceClient;
 use App\Services\OrchestratorClient;
+use App\Services\NotificationServiceClient;
 use App\Services\ReportingServiceClient;
 use App\Services\SerpServiceClient;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -24,6 +25,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(OrchestratorClient::class, fn () => OrchestratorClient::fromConfig());
         $this->app->singleton(SerpServiceClient::class, fn () => SerpServiceClient::fromConfig());
         $this->app->singleton(ReportingServiceClient::class, fn () => ReportingServiceClient::fromConfig());
+        $this->app->singleton(NotificationServiceClient::class, fn () => NotificationServiceClient::fromConfig());
     }
 
     /**

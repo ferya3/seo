@@ -28,6 +28,11 @@ return [
         'timeout' => (int) env('REPORTING_SERVICE_TIMEOUT', 20),
     ],
 
+    'notifications' => [
+        'url' => env('NOTIFICATIONS_SERVICE_URL', 'http://notifications-api:8000'),
+        'timeout' => (int) env('NOTIFICATIONS_SERVICE_TIMEOUT', 15),
+    ],
+
     'crawl' => [
         'url' => env('CRAWL_SERVICE_URL', 'http://crawl-api:8000'),
         'timeout' => (int) env('CRAWL_SERVICE_TIMEOUT', 10),

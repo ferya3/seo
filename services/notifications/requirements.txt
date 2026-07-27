@@ -1,0 +1,10 @@
+# سرویس Notifications — وبهوک و ایمیل
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pika>=1.3
+jsonschema>=4.21
+# برای فرستادن وبهوک
+requests>=2.32
+
+# اجباری: سرویس اعلان بدون دیتابیس اشتراک‌هایش را با هر ری‌استارت فراموش می‌کند.
+psycopg[binary,pool]>=3.2

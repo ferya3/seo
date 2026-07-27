@@ -9,6 +9,11 @@ from seoagent.fetcher import Fetcher
 from seoagent.web import auth
 from seoagent.web.app import create_app
 
+# The guard itself lives in shared/ now — three services make requests to URLs
+# a user typed. `seoagent.netguard` is the engine's door to it, so the public
+# names come through that; patching an internal needs the real module.
+from shared import netguard as shared_netguard
+
 
 @pytest.fixture(autouse=True)
 def block_private(monkeypatch):
@@ -56,7 +61,7 @@ def test_non_http_schemes_are_refused(url):
 
 def test_hostname_resolving_to_loopback_is_refused(monkeypatch):
     """A public-looking name whose DNS points inside must still be blocked."""
-    monkeypatch.setattr(netguard, "_resolve", lambda host: ("127.0.0.1",))
+    monkeypatch.setattr(shared_netguard, "_resolve", lambda host: ("127.0.0.1",))
     with pytest.raises(netguard.TargetNotAllowed):
         netguard.check_url("http://sneaky.example.com/")
 
