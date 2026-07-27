@@ -24,6 +24,11 @@ CATEGORY_WEIGHT = {
     Category.INTERNATIONAL: 0.5,
 }
 
+# Ceiling on the internal edges carried in a report. Fifty thousand edges is a
+# few megabytes of JSON — enough for any site this tool is meant for, and a
+# stop before a report grows past what a browser can open.
+MAX_EDGES = 50_000
+
 
 @dataclass
 class CategoryScore:
@@ -78,10 +83,42 @@ class Report:
                 }
                 for p in self.site.pages
             ],
+            "links": self.internal_edges(),
             "psi": self.site.psi,
             "notes": self.site.notes,
             "ai_suggestions": self.ai_suggestions,
         }
+
+    def internal_edges(self, limit: int = MAX_EDGES) -> dict[str, Any]:
+        """The internal link graph: who links to whom, with what anchor.
+
+        The page list above says each page has N incoming links; it cannot say
+        *from where*, and every question worth asking about internal linking —
+        which pages the site's own structure treats as important, which links
+        point at pages that redirect, which targets only ever get "click here"
+        — is a question about edges. So the crawl records them once here rather
+        than every consumer re-crawling to rebuild the same graph.
+
+        External links are left out on purpose: they would roughly double the
+        size and answer a different question.
+        """
+        edges: list[dict[str, Any]] = []
+        for page in self.site.pages:
+            for link in page.links:
+                if not link.is_internal:
+                    continue
+                if len(edges) >= limit:
+                    # Truncated rather than unbounded: a large site can have
+                    # hundreds of thousands of edges, and a report nobody can
+                    # load is worse than a report that says it is partial.
+                    return {"edges": edges, "truncated": True, "limit": limit}
+                edges.append({
+                    "from": page.url,
+                    "to": link.href,
+                    "anchor": link.anchor[:120],
+                    "nofollow": link.is_nofollow,
+                })
+        return {"edges": edges, "truncated": False, "limit": limit}
 
     def stats(self) -> dict[str, Any]:
         pages = self.site.pages

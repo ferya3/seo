@@ -44,6 +44,11 @@ def _site_audit(inputs: dict[str, Any]) -> list[Step]:
     orchestrator at all. Each step needs the one before it: the keyword seed
     can be filled in from what the crawl found, and the rank check has nothing
     to check until research has produced keywords.
+
+    The link analysis comes last rather than second, even though it only needs
+    the crawl. Ordering it here costs nothing — it is arithmetic over data
+    already gathered — and keeps the expensive network steps starting as early
+    as possible.
     """
     start_url = (inputs.get("start_url") or "").strip()
     if not start_url:
@@ -71,6 +76,7 @@ def _site_audit(inputs: dict[str, Any]) -> list[Step]:
             "country": research_params["country"],
             "top_keywords": int(inputs.get("track_keywords") or DEFAULT_TRACKED),
         }),
+        Step(position=4, kind="link_analysis", params={}),
     ]
 
 

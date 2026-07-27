@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/links.analyzed.json",
+  "title": "links.analyzed",
+  "description": "An internal link analysis finished. Carries the headline counts and where the full graph lives; the graph itself is thousands of edges and does not belong in a message.",
+  "type": "object",
+  "required": ["analysis_id", "crawl_id", "status", "result_url"],
+  "additionalProperties": false,
+  "properties": {
+    "analysis_id": {"type": "string", "format": "uuid"},
+    "crawl_id": {"type": "string"},
+    "status": {"enum": ["completed", "failed"]},
+    "error": {"type": ["string", "null"]},
+    "pages": {"type": "integer", "minimum": 0},
+    "internal_links": {"type": "integer", "minimum": 0},
+    "orphan_count": {"type": "integer", "minimum": 0},
+    "dead_end_count": {"type": "integer", "minimum": 0},
+    "broken_target_count": {"type": "integer", "minimum": 0},
+    "max_depth": {"type": "integer", "minimum": 0},
+    "average_inlinks": {"type": "number", "minimum": 0},
+    "top_opportunities": {
+      "type": "array",
+      "maxItems": 10,
+      "description": "Pages with real content and almost no internal support, weakest first.",
+      "items": {
+        "type": "object",
+        "required": ["url"],
+        "additionalProperties": false,
+        "properties": {
+          "url": {"type": "string"},
+          "inlinks": {"type": "integer", "minimum": 0},
+          "authority": {"type": "number"}
+        }
+      }
+    },
+    "result_url": {"type": "string"}
+  }
+}

@@ -189,3 +189,33 @@ def test_quick_wins_are_ordered_by_severity(bad_audit):
     wins = report.quick_wins()
     severities = [w.severity for w in wins]
     assert severities == sorted(severities)
+
+
+def test_the_report_carries_the_internal_link_graph(good_audit):
+    """The page list says a page has N incoming links; only the edges say from
+    where. Every internal-linking question is a question about edges, so the
+    crawl records them once instead of each consumer re-crawling to rebuild the
+    same graph."""
+    _, _, report = good_audit
+    links = report.to_dict()["links"]
+
+    assert links["edges"], "a crawled site with navigation has internal edges"
+    assert links["truncated"] is False
+    first = links["edges"][0]
+    assert set(first) == {"from", "to", "anchor", "nofollow"}
+
+
+def test_external_links_stay_out_of_the_graph(good_audit):
+    """They would roughly double the size and answer a different question."""
+    ctx, _, report = good_audit
+    hosts = {edge["to"].split("/")[2] for edge in report.to_dict()["links"]["edges"]}
+    assert hosts <= {ctx.start_url.split("/")[2]}
+
+
+def test_the_graph_says_when_it_was_cut_short(good_audit):
+    """A partial graph makes every count a lower bound. Silently truncating
+    would turn a big site into a wrong answer about orphan pages."""
+    _, _, report = good_audit
+    cut = report.internal_edges(limit=1)
+    assert cut["truncated"] is True
+    assert len(cut["edges"]) == 1

@@ -31,6 +31,7 @@ STEP_FA = {
     "crawl": "خزش سایت",
     "keyword_research": "تحقیق کلمات کلیدی",
     "serp_check": "بررسی جایگاه",
+    "link_analysis": "تحلیل لینک داخلی",
 }
 
 SUMMARY_SCHEMA = {
@@ -122,6 +123,18 @@ def _sentences(report, headline, rankings) -> list[str]:
         if best:
             out.append(f"بهترین جایگاه {best.get('position')} برای «{best.get('keyword')}» است.")
 
+    links = report.get("links") or {}
+    if links.get("pages"):
+        piece = f"{links['pages']} صفحه با {links.get('internal_links', 0)} لینک داخلی به هم وصل‌اند"
+        orphans = links.get("orphan_count") or 0
+        if orphans:
+            piece += f" و {orphans} صفحه هیچ لینک داخلی نمی‌گیرد"
+        out.append(piece + ".")
+        if links.get("broken_target_count"):
+            out.append(
+                f"{links['broken_target_count']} صفحه‌ی خراب هنوز از داخل سایت لینک می‌گیرند."
+            )
+
     competitors = [c.get("domain") for c in (rankings.get("top_competitors") or [])[:3]]
     if competitors:
         out.append("رقبایی که بیش از همه بالاتر می‌ایستند: " + "، ".join(competitors) + ".")
@@ -162,6 +175,14 @@ def _actions(report, headline, rankings) -> list[dict[str, str]]:
                 "why": "در صفحه‌ی اول نتایج هست ولی پایین‌تر از جایی که کلیک بگیرد.",
                 "effort": "متوسط", "impact": "متوسط",
             })
+
+    for row in ((report.get("links") or {}).get("top_opportunities") or [])[:2]:
+        actions.append({
+            "action": f"از یک صفحه‌ی قوی به «{row.get('url')}» لینک بده.",
+            "why": f"این صفحه محتوا دارد ولی فقط {row.get('inlinks', 0)} لینک داخلی می‌گیرد؛ "
+                   "ارزان‌ترین کاری که می‌شود برایش کرد همین است.",
+            "effort": "کم", "impact": "متوسط",
+        })
 
     issues = headline.get("total_issues")
     if issues:

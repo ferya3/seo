@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/links.analysis_requested.json",
+  "title": "links.analysis_requested",
+  "description": "Analyse the internal link graph of a finished crawl. Published by the gateway or the orchestrator; consumed by the internal-links service, which fetches the crawl report itself rather than receiving it here.",
+  "type": "object",
+  "required": ["crawl_id"],
+  "additionalProperties": false,
+  "properties": {
+    "analysis_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Allocated by the caller so the result url is known before the work starts."
+    },
+    "crawl_id": {"type": "string", "format": "uuid"}
+  }
+}

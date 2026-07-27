@@ -22,6 +22,16 @@ interface Report {
   }
   crawl?: Record<string, unknown>
   keywords?: Record<string, unknown>
+  links?: {
+    pages?: number
+    internal_links?: number
+    orphan_count?: number
+    dead_end_count?: number
+    broken_target_count?: number
+    max_depth?: number
+    average_inlinks?: number
+    top_opportunities?: { url: string, inlinks: number, authority: number }[]
+  }
   rankings?: {
     target_domain?: string
     best?: { keyword: string, position: number } | null
@@ -82,6 +92,7 @@ const tiles = computed(() => {
     { name: 'کلمات کلیدی', value: headline.keywords_found },
     { name: 'رتبه‌گرفته', value: headline.keywords_ranked },
     { name: 'میانگین جایگاه', value: headline.average_position },
+    { name: 'صفحه‌ی یتیم', value: headline.orphan_pages },
   ]
 })
 </script>
@@ -177,6 +188,52 @@ const tiles = computed(() => {
             </tr>
           </tbody>
         </table>
+      </section>
+
+      <section v-if="report?.links?.pages" class="panel">
+        <h2>لینک‌های داخلی</h2>
+        <div class="tiles">
+          <div class="tile">
+            <div class="value">{{ report.links.internal_links ?? '—' }}</div>
+            <div class="name">لینک داخلی</div>
+          </div>
+          <div class="tile">
+            <div class="value" :class="report.links.orphan_count ? 'poor' : 'good'">
+              {{ report.links.orphan_count ?? '—' }}
+            </div>
+            <div class="name">صفحه‌ی یتیم</div>
+          </div>
+          <div class="tile">
+            <div class="value" :class="report.links.broken_target_count ? 'poor' : 'good'">
+              {{ report.links.broken_target_count ?? '—' }}
+            </div>
+            <div class="name">لینک به صفحه‌ی خراب</div>
+          </div>
+          <div class="tile">
+            <div class="value">{{ report.links.average_inlinks ?? '—' }}</div>
+            <div class="name">میانگین لینک ورودی</div>
+          </div>
+        </div>
+
+        <template v-if="report.links.top_opportunities?.length">
+          <h3>صفحاتی که لینک داخلی کم دارند</h3>
+          <p class="lede">
+            محتوا دارند ولی سایت خودش به آن‌ها کم اشاره می‌کند. یک لینک از یک
+            صفحه‌ی قوی، ارزان‌ترین کاری است که می‌شود برایشان کرد.
+          </p>
+          <table>
+            <thead>
+              <tr><th>صفحه</th><th>لینک ورودی</th><th>اعتبار داخلی</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in report.links.top_opportunities" :key="row.url">
+                <td class="ltr">{{ row.url }}</td>
+                <td>{{ row.inlinks }}</td>
+                <td class="muted">{{ row.authority }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
       </section>
 
       <section v-if="report?.rankings?.top_competitors?.length" class="panel">

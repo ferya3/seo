@@ -98,6 +98,40 @@ def serp_done(job_id: str, status: str = "completed", error: str | None = None) 
     }
 
 
+def links_done(job_id: str, status: str = "completed", error: str | None = None) -> dict:
+    return {
+        "analysis_id": job_id,
+        "crawl_id": "crawl-1",
+        "status": status,
+        "error": error,
+        "pages": 3,
+        "internal_links": 4,
+        "orphan_count": 1,
+        "dead_end_count": 1,
+        "broken_target_count": 0,
+        "max_depth": 2,
+        "average_inlinks": 1.3,
+        "top_opportunities": [{"url": "https://example.com/deep", "inlinks": 0, "authority": 3.2}],
+        "result_url": f"/v1/link-analyses/{job_id}",
+    }
+
+
+def drive(store, workflow_id, through: int = 4) -> None:
+    """Feed a workflow the completion events for its first `through` steps.
+
+    One place that knows the running order, so adding a fifth step later means
+    changing this rather than every test that drives a workflow to the end.
+    """
+    events = ["crawl.completed", "keyword.researched", "serp.checked", "links.analyzed"]
+    payloads = [crawl_done, research_done, serp_done, links_done]
+
+    for index in range(through):
+        step = store.get(workflow_id).step_at(index + 1)
+        if step.status in ("skipped", "completed"):
+            continue
+        engine.on_completion(store, events[index], payloads[index](step.job_id))
+
+
 def started(store, inputs=None) -> str:
     workflow_id = str(uuid.uuid4())
     engine.start(store, workflow_id, "site_audit", inputs or dict(AUDIT))
@@ -110,7 +144,7 @@ def started(store, inputs=None) -> str:
 def test_a_site_audit_crawls_then_researches_then_checks_rankings():
     steps = planner.plan("site_audit", AUDIT)
     assert [(s.position, s.kind) for s in steps] == [
-        (1, "crawl"), (2, "keyword_research"), (3, "serp_check")
+        (1, "crawl"), (2, "keyword_research"), (3, "serp_check"), (4, "link_analysis")
     ]
 
 
@@ -150,7 +184,9 @@ def test_starting_dispatches_only_the_first_step(store, conn):
     workflow = store.get(workflow_id)
 
     assert workflow.status == "running"
-    assert [s.status for s in workflow.steps] == ["dispatched", "pending", "pending"]
+    assert [s.status for s in workflow.steps] == [
+        "dispatched", "pending", "pending", "pending"
+    ]
 
     # The second step must not have been asked for yet.
     types = [r[0] for r in conn.execute("SELECT event_type FROM outbox ORDER BY id").fetchall()]
@@ -182,7 +218,9 @@ def test_finishing_a_step_dispatches_the_next(store, conn):
     engine.on_completion(store, "crawl.completed", crawl_done(crawl_step.job_id))
 
     workflow = store.get(workflow_id)
-    assert [s.status for s in workflow.steps] == ["completed", "dispatched", "pending"]
+    assert [s.status for s in workflow.steps] == [
+        "completed", "dispatched", "pending", "pending"
+    ]
     types = [r[0] for r in conn.execute("SELECT event_type FROM outbox ORDER BY id").fetchall()]
     assert types == ["crawl.requested", "keyword.research_requested"]
 
@@ -209,33 +247,27 @@ def test_the_research_seed_is_resolved_after_the_crawl(store, conn):
 
 def test_the_last_step_completes_the_workflow(store):
     workflow_id = started(store)
-    steps = store.get(workflow_id).steps
 
-    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
-    engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
-    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
+    drive(store, workflow_id)
 
     workflow = store.get(workflow_id)
     assert workflow.status == "completed"
     assert workflow.report["headline"] == {
         "overall_score": 73, "total_issues": 9, "keywords_found": 128,
-        "keywords_ranked": 2, "average_position": 3.5,
+        "keywords_ranked": 2, "average_position": 3.5, "orphan_pages": 1,
     }
 
 
 def test_completion_emits_a_contract_valid_event(store, conn):
     workflow_id = started(store)
-    steps = store.get(workflow_id).steps
-    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
-    engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
-    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
+    drive(store, workflow_id)
 
     payload = conn.execute(
         "SELECT payload FROM outbox WHERE event_type='workflow.completed'"
     ).fetchone()[0]
     validate_event("workflow.completed", payload)
     assert payload["status"] == "completed"
-    assert [s["status"] for s in payload["steps"]] == ["completed"] * 3
+    assert [s["status"] for s in payload["steps"]] == ["completed"] * 4
 
 
 def test_the_report_links_to_results_rather_than_copying_them(store):
@@ -243,9 +275,7 @@ def test_the_report_links_to_results_rather_than_copying_them(store):
     copy with no way to stay in step with the first."""
     workflow_id = started(store)
     steps = store.get(workflow_id).steps
-    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
-    engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
-    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
+    drive(store, workflow_id)
 
     report = store.get(workflow_id).report
     assert report["crawl"]["result_url"] == f"/v1/crawls/{steps[0].job_id}"
@@ -364,10 +394,7 @@ def test_two_orchestrators_cannot_both_dispatch_the_next_step(store):
 
 def test_advancing_a_finished_workflow_does_nothing(store, conn):
     workflow_id = started(store)
-    steps = store.get(workflow_id).steps
-    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
-    engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
-    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
+    drive(store, workflow_id)
 
     before = conn.execute("SELECT count(*) FROM outbox").fetchone()[0]
     engine.advance(store, workflow_id)
@@ -413,7 +440,7 @@ def test_the_worker_ignores_a_workflow_it_already_started(store, monkeypatch):
 
     with psycopg.connect(DSN, autocommit=True) as c:
         assert c.execute("SELECT count(*) FROM workflow_steps WHERE workflow_id = %s",
-                         (workflow_id,)).fetchone()[0] == 3
+                         (workflow_id,)).fetchone()[0] == 4
 
 
 def test_the_worker_dead_letters_a_malformed_request(store, monkeypatch):
@@ -443,7 +470,7 @@ def test_the_worker_advances_on_a_completion_event(store, monkeypatch):
     ))
 
     assert [s.status for s in store.get(workflow_id).steps] == [
-        "completed", "dispatched", "pending"
+        "completed", "dispatched", "pending", "pending"
     ]
 
 
@@ -477,7 +504,9 @@ def test_the_api_runs_a_workflow_end_to_end(store, monkeypatch):
 
     body = client.get(f"/v1/workflows/{workflow_id}").json()
     assert body["status"] == "running"
-    assert [s["kind"] for s in body["steps"]] == ["crawl", "keyword_research", "serp_check"]
+    assert [s["kind"] for s in body["steps"]] == [
+        "crawl", "keyword_research", "serp_check", "link_analysis"
+    ]
 
     assert any(w["workflow_id"] == workflow_id for w in client.get("/v1/workflows").json())
 
@@ -550,9 +579,15 @@ def test_research_finding_nothing_skips_the_check_rather_than_failing(store, con
     empty["total"] = 0
     engine.on_completion(store, "keyword.researched", empty)
 
+    # The skipped step does not end the workflow — the one after it still runs.
+    assert store.get(workflow_id).step_at(3).status == "skipped"
+    drive(store, workflow_id)
+
     workflow = store.get(workflow_id)
     assert workflow.status == "completed"
-    assert [s.status for s in workflow.steps] == ["completed", "completed", "skipped"]
+    assert [s.status for s in workflow.steps] == [
+        "completed", "completed", "skipped", "completed"
+    ]
     # The crawl's findings survive.
     assert workflow.report["headline"]["overall_score"] == 73
 
@@ -567,6 +602,7 @@ def test_a_skipped_step_is_reported_as_skipped_not_failed(store, conn):
     empty = research_done(steps[1].job_id)
     empty["top_keywords"] = []
     engine.on_completion(store, "keyword.researched", empty)
+    drive(store, workflow_id)
 
     payload = conn.execute(
         "SELECT payload FROM outbox WHERE event_type='workflow.completed'"
@@ -593,9 +629,7 @@ def test_a_failed_rank_check_fails_the_workflow(store):
 def test_the_rankings_reach_the_final_report(store):
     workflow_id = started(store)
     steps = store.get(workflow_id).steps
-    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
-    engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
-    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
+    drive(store, workflow_id)
 
     report = store.get(workflow_id).report
     assert report["rankings"]["average_position"] == 3.5
@@ -660,10 +694,7 @@ def test_the_tracked_count_reaches_the_plan(store, conn, monkeypatch):
 def finished(store) -> str:
     """A workflow taken all the way to completed."""
     workflow_id = started(store)
-    steps = store.get(workflow_id).steps
-    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
-    engine.on_completion(store, "keyword.researched", research_done(steps[1].job_id))
-    engine.on_completion(store, "serp.checked", serp_done(steps[2].job_id))
+    drive(store, workflow_id)
     return workflow_id
 
 
@@ -691,7 +722,9 @@ def test_a_failed_workflow_is_summarised_too(store):
 
 def test_the_report_lists_its_steps(store):
     steps = store.get(finished(store)).report["steps"]
-    assert [s["kind"] for s in steps] == ["crawl", "keyword_research", "serp_check"]
+    assert [s["kind"] for s in steps] == [
+        "crawl", "keyword_research", "serp_check", "link_analysis"
+    ]
 
 
 def test_the_summary_is_written_off_the_lock_not_inside_it(store, monkeypatch):
@@ -838,3 +871,55 @@ def test_another_tenants_workflow_is_404_over_http(store, conn, monkeypatch):
     assert client.get(f"/v1/workflows/{workflow_id}",
                       params={"tenant_id": theirs}).status_code == 404
     assert client.get("/v1/workflows", params={"tenant_id": theirs}).json() == []
+
+
+# ------------------------------------------------------- the link analysis
+
+
+def test_the_link_analysis_is_told_which_crawl_to_read(store, conn):
+    """The fourth step's only input is the crawl this workflow just ran. The
+    service fetches the report itself, so all that travels is the id."""
+    workflow_id = started(store)
+    steps = store.get(workflow_id).steps
+    drive(store, workflow_id, through=3)
+
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE event_type='links.analysis_requested'"
+    ).fetchone()[0]
+    validate_event("links.analysis_requested", payload)
+    assert payload["crawl_id"] == steps[0].job_id
+    assert payload["analysis_id"] == steps[3].job_id
+
+
+def test_a_workflow_whose_crawl_failed_never_asks_for_a_link_analysis(store, conn):
+    workflow_id = started(store)
+    step = store.get(workflow_id).step_at(1)
+    engine.on_completion(
+        store, "crawl.completed", crawl_done(step.job_id, "failed", "Timeout: unreachable")
+    )
+
+    assert store.get(workflow_id).status == "failed"
+    assert conn.execute(
+        "SELECT count(*) FROM outbox WHERE event_type='links.analysis_requested'"
+    ).fetchone()[0] == 0
+
+
+def test_the_link_findings_reach_the_final_report(store):
+    workflow_id = started(store)
+    drive(store, workflow_id)
+
+    report = store.get(workflow_id).report
+    assert report["links"]["orphan_count"] == 1
+    assert report["headline"]["orphan_pages"] == 1
+    assert report["links"]["result_url"].startswith("/v1/link-analyses/")
+
+
+def test_the_summary_says_what_the_links_look_like(store):
+    workflow_id = started(store)
+    drive(store, workflow_id)
+
+    summary = store.get(workflow_id).report["summary"]
+    assert "لینک داخلی" in summary["text_fa"]
+    # The cheapest piece of work a link graph can name, so it belongs in the
+    # action list rather than only in the numbers.
+    assert any("لینک" in a["action"] for a in summary["next_actions"])

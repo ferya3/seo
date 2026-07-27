@@ -38,6 +38,7 @@ COMPLETIONS = {
     "crawl.completed": ("crawl", "crawl_id"),
     "keyword.researched": ("keyword_research", "research_id"),
     "serp.checked": ("serp_check", "check_id"),
+    "links.analyzed": ("link_analysis", "analysis_id"),
 }
 
 
@@ -144,6 +145,9 @@ def _dispatch_event(workflow: Workflow, step) -> PendingEvent:
     elif step.kind == "serp_check":
         event_type = "serp.check_requested"
         payload = {"check_id": step.job_id, **_serp_params(workflow)}
+    elif step.kind == "link_analysis":
+        event_type = "links.analysis_requested"
+        payload = {"analysis_id": step.job_id, **_links_params(workflow)}
     else:                                             # pragma: no cover - guarded by the schema
         raise ValueError(f"unknown step kind {step.kind!r}")
 
@@ -211,6 +215,20 @@ def _serp_params(workflow: Workflow) -> dict[str, Any]:
     }
 
 
+def _links_params(workflow: Workflow) -> dict[str, Any]:
+    """Which crawl to analyse — the one this workflow just ran.
+
+    The service fetches the report itself; all that travels is the id.
+    """
+    crawl = next((s.result for s in workflow.steps if s.kind == "crawl" and s.result), None)
+    crawl_id = (crawl or {}).get("crawl_id")
+    if not crawl_id:
+        # The crawl failed or was skipped, so there is no graph to analyse.
+        # Nothing to do is not a failure — see NoWorkToDo.
+        raise NoWorkToDo("no crawl to analyse")
+    return {"crawl_id": crawl_id}
+
+
 class NoWorkToDo(Exception):
     """A step has nothing to act on. The workflow finishes, it does not fail."""
 
@@ -271,6 +289,7 @@ def _report(
     crawl = result_of("crawl")
     research = result_of("keyword_research")
     serp = result_of("serp_check")
+    links = result_of("link_analysis")
 
     report = {
         "goal": workflow.goal,
@@ -283,10 +302,12 @@ def _report(
             "keywords_found": research.get("total"),
             "keywords_ranked": serp.get("keywords_ranked"),
             "average_position": serp.get("average_position"),
+            "orphan_pages": links.get("orphan_count"),
         },
         "crawl": crawl,
         "keywords": research,
         "rankings": serp,
+        "links": links,
     }
     # The deterministic summary only — this runs while the workflow row is
     # locked, so it may not touch the network. The model-written one replaces
@@ -317,6 +338,20 @@ def _step_result(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             # Kept rather than trimmed to a headline: the next step reads this
             # to decide what to rank-check.
             "top_keywords": payload.get("top_keywords", [])[:25],
+            "result_url": payload.get("result_url"),
+        }
+    if kind == "link_analysis":
+        return {
+            "analysis_id": payload.get("analysis_id"),
+            "crawl_id": payload.get("crawl_id"),
+            "pages": payload.get("pages"),
+            "internal_links": payload.get("internal_links"),
+            "orphan_count": payload.get("orphan_count"),
+            "dead_end_count": payload.get("dead_end_count"),
+            "broken_target_count": payload.get("broken_target_count"),
+            "max_depth": payload.get("max_depth"),
+            "average_inlinks": payload.get("average_inlinks"),
+            "top_opportunities": payload.get("top_opportunities", [])[:10],
             "result_url": payload.get("result_url"),
         }
     return {
