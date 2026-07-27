@@ -52,7 +52,8 @@
               "crawl",
               "keyword_research",
               "serp_check",
-              "link_analysis"
+              "link_analysis",
+              "content_analysis"
             ]
           },
           "job_id": {
@@ -120,6 +121,12 @@
         "orphan_pages": {
           "type": [
             "integer",
+            "null"
+          ]
+        },
+        "keyword_coverage": {
+          "type": [
+            "number",
             "null"
           ]
         }

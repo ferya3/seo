@@ -22,6 +22,14 @@ interface Report {
   }
   crawl?: Record<string, unknown>
   keywords?: Record<string, unknown>
+  content?: {
+    keywords?: number
+    covered?: number
+    coverage?: number
+    gap_count?: number
+    cannibalisation_count?: number
+    top_gaps?: { keyword: string, demand: number }[]
+  }
   links?: {
     pages?: number
     internal_links?: number
@@ -93,6 +101,7 @@ const tiles = computed(() => {
     { name: 'رتبه‌گرفته', value: headline.keywords_ranked },
     { name: 'میانگین جایگاه', value: headline.average_position },
     { name: 'صفحه‌ی یتیم', value: headline.orphan_pages },
+    { name: 'پوشش کلمات (٪)', value: headline.keyword_coverage },
   ]
 })
 </script>
@@ -188,6 +197,48 @@ const tiles = computed(() => {
             </tr>
           </tbody>
         </table>
+      </section>
+
+      <section v-if="report?.content?.keywords" class="panel">
+        <h2>پوشش محتوا</h2>
+        <p class="lede">
+          کدام کلمه‌های کلیدیِ تحقیق‌شده صفحه‌ای دارند و کدام ندارند. تطبیق بر
+          اساس عنوان، توضیح متا و تیترهاست — یعنی چیزی که صفحه درباره‌ی خودش
+          اعلام می‌کند، نه متن بدنه.
+        </p>
+        <div class="tiles">
+          <div class="tile">
+            <div class="value">{{ report.content.coverage ?? '—' }}٪</div>
+            <div class="name">پوشش</div>
+          </div>
+          <div class="tile">
+            <div class="value" :class="report.content.gap_count ? 'fair' : 'good'">
+              {{ report.content.gap_count ?? '—' }}
+            </div>
+            <div class="name">کلمه‌ی بدون صفحه</div>
+          </div>
+          <div class="tile">
+            <div class="value" :class="report.content.cannibalisation_count ? 'poor' : 'good'">
+              {{ report.content.cannibalisation_count ?? '—' }}
+            </div>
+            <div class="name">رقابت داخلی</div>
+          </div>
+        </div>
+
+        <template v-if="report.content.top_gaps?.length">
+          <h3>صفحه‌هایی که هنوز نوشته نشده‌اند</h3>
+          <table>
+            <thead>
+              <tr><th>کلمه کلیدی</th><th>تقاضا</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="gap in report.content.top_gaps" :key="gap.keyword">
+                <td>{{ gap.keyword }}</td>
+                <td class="muted">{{ gap.demand }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
       </section>
 
       <section v-if="report?.links?.pages" class="panel">

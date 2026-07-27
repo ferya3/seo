@@ -32,6 +32,7 @@ STEP_FA = {
     "keyword_research": "تحقیق کلمات کلیدی",
     "serp_check": "بررسی جایگاه",
     "link_analysis": "تحلیل لینک داخلی",
+    "content_analysis": "پوشش محتوا",
 }
 
 SUMMARY_SCHEMA = {
@@ -135,6 +136,17 @@ def _sentences(report, headline, rankings) -> list[str]:
                 f"{links['broken_target_count']} صفحه‌ی خراب هنوز از داخل سایت لینک می‌گیرند."
             )
 
+    content = report.get("content") or {}
+    if content.get("keywords"):
+        out.append(
+            f"از {content['keywords']} کلمه‌ی بررسی‌شده، برای {content.get('covered', 0)} مورد "
+            f"صفحه‌ای وجود دارد ({content.get('coverage', 0)} درصد پوشش)."
+        )
+        if content.get("cannibalisation_count"):
+            out.append(
+                f"روی {content['cannibalisation_count']} عبارت، چند صفحه با هم رقابت می‌کنند."
+            )
+
     competitors = [c.get("domain") for c in (rankings.get("top_competitors") or [])[:3]]
     if competitors:
         out.append("رقبایی که بیش از همه بالاتر می‌ایستند: " + "، ".join(competitors) + ".")
@@ -182,6 +194,14 @@ def _actions(report, headline, rankings) -> list[dict[str, str]]:
             "why": f"این صفحه محتوا دارد ولی فقط {row.get('inlinks', 0)} لینک داخلی می‌گیرد؛ "
                    "ارزان‌ترین کاری که می‌شود برایش کرد همین است.",
             "effort": "کم", "impact": "متوسط",
+        })
+
+    for row in ((report.get("content") or {}).get("top_gaps") or [])[:2]:
+        actions.append({
+            "action": f"صفحه‌ای برای «{row.get('keyword')}» بساز.",
+            "why": "این عبارت در تحقیق کلمات کلیدی هست ولی هیچ صفحه‌ای خودش را "
+                   "درباره‌ی آن اعلام نکرده.",
+            "effort": "زیاد", "impact": "زیاد",
         })
 
     issues = headline.get("total_issues")

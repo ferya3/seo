@@ -39,6 +39,7 @@ COMPLETIONS = {
     "keyword.researched": ("keyword_research", "research_id"),
     "serp.checked": ("serp_check", "check_id"),
     "links.analyzed": ("link_analysis", "analysis_id"),
+    "content.analyzed": ("content_analysis", "analysis_id"),
 }
 
 
@@ -148,6 +149,9 @@ def _dispatch_event(workflow: Workflow, step) -> PendingEvent:
     elif step.kind == "link_analysis":
         event_type = "links.analysis_requested"
         payload = {"analysis_id": step.job_id, **_links_params(workflow)}
+    elif step.kind == "content_analysis":
+        event_type = "content.analysis_requested"
+        payload = {"analysis_id": step.job_id, **_content_params(workflow)}
     else:                                             # pragma: no cover - guarded by the schema
         raise ValueError(f"unknown step kind {step.kind!r}")
 
@@ -229,6 +233,25 @@ def _links_params(workflow: Workflow) -> dict[str, Any]:
     return {"crawl_id": crawl_id}
 
 
+def _content_params(workflow: Workflow) -> dict[str, Any]:
+    """The only step that needs two earlier ones at once.
+
+    Coverage is a question about a crawl *and* a keyword study; with either
+    one missing there is no question to ask, so the step is skipped rather
+    than failed.
+    """
+    crawl = next((s.result for s in workflow.steps if s.kind == "crawl" and s.result), None)
+    research = next(
+        (s.result for s in workflow.steps if s.kind == "keyword_research" and s.result), None
+    )
+    crawl_id = (crawl or {}).get("crawl_id")
+    research_id = (research or {}).get("research_id")
+
+    if not crawl_id or not research_id:
+        raise NoWorkToDo("content coverage needs both a crawl and a keyword study")
+    return {"crawl_id": crawl_id, "research_id": research_id}
+
+
 class NoWorkToDo(Exception):
     """A step has nothing to act on. The workflow finishes, it does not fail."""
 
@@ -290,6 +313,7 @@ def _report(
     research = result_of("keyword_research")
     serp = result_of("serp_check")
     links = result_of("link_analysis")
+    content = result_of("content_analysis")
 
     report = {
         "goal": workflow.goal,
@@ -303,11 +327,13 @@ def _report(
             "keywords_ranked": serp.get("keywords_ranked"),
             "average_position": serp.get("average_position"),
             "orphan_pages": links.get("orphan_count"),
+            "keyword_coverage": content.get("coverage"),
         },
         "crawl": crawl,
         "keywords": research,
         "rankings": serp,
         "links": links,
+        "content": content,
     }
     # The deterministic summary only — this runs while the workflow row is
     # locked, so it may not touch the network. The model-written one replaces
@@ -338,6 +364,19 @@ def _step_result(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             # Kept rather than trimmed to a headline: the next step reads this
             # to decide what to rank-check.
             "top_keywords": payload.get("top_keywords", [])[:25],
+            "result_url": payload.get("result_url"),
+        }
+    if kind == "content_analysis":
+        return {
+            "analysis_id": payload.get("analysis_id"),
+            "crawl_id": payload.get("crawl_id"),
+            "research_id": payload.get("research_id"),
+            "keywords": payload.get("keywords"),
+            "covered": payload.get("covered"),
+            "coverage": payload.get("coverage"),
+            "gap_count": payload.get("gap_count"),
+            "cannibalisation_count": payload.get("cannibalisation_count"),
+            "top_gaps": payload.get("top_gaps", [])[:10],
             "result_url": payload.get("result_url"),
         }
     if kind == "link_analysis":

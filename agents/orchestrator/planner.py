@@ -45,10 +45,12 @@ def _site_audit(inputs: dict[str, Any]) -> list[Step]:
     can be filled in from what the crawl found, and the rank check has nothing
     to check until research has produced keywords.
 
-    The link analysis comes last rather than second, even though it only needs
-    the crawl. Ordering it here costs nothing — it is arithmetic over data
-    already gathered — and keeps the expensive network steps starting as early
-    as possible.
+    The link analysis comes fourth rather than second, even though it only
+    needs the crawl. Ordering it late costs nothing — it is arithmetic over
+    data already gathered — and keeps the expensive network steps starting as
+    early as possible. The content analysis is last because it is the only
+    step that needs two earlier ones at once: the crawl for what pages exist
+    and the research for what people search.
     """
     start_url = (inputs.get("start_url") or "").strip()
     if not start_url:
@@ -77,6 +79,7 @@ def _site_audit(inputs: dict[str, Any]) -> list[Step]:
             "top_keywords": int(inputs.get("track_keywords") or DEFAULT_TRACKED),
         }),
         Step(position=4, kind="link_analysis", params={}),
+        Step(position=5, kind="content_analysis", params={}),
     ]
 
 

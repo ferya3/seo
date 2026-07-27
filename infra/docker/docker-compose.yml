@@ -242,6 +242,48 @@ services:
       postgres: {condition: service_healthy}
     restart: on-failure
 
+  content-api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/content.Dockerfile
+    command: ["uvicorn", "services.content.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      CONTENT_DATA_DIR: /var/lib/seoagent/content
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+      # Two upstreams, because coverage is a question about both.
+      CRAWL_SERVICE_URL: http://crawl-api:8000
+      KEYWORD_SERVICE_URL: http://keyword-api:8000
+    ports: ["127.0.0.1:8006:8000"]
+    volumes:
+      - content-data:/var/lib/seoagent/content
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  content-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/content.Dockerfile
+    command: ["python", "-m", "services.content.worker"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      CONTENT_DATA_DIR: /var/lib/seoagent/content
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+      CRAWL_SERVICE_URL: http://crawl-api:8000
+      KEYWORD_SERVICE_URL: http://keyword-api:8000
+    volumes:
+      - content-data:/var/lib/seoagent/content
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    restart: on-failure
+
   orchestrator-api:
     build:
       context: ../..
@@ -326,3 +368,4 @@ volumes:
   keyword-data:
   serp-data:
   links-data:
+  content-data:

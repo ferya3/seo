@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
 from services.internal_links import source  # noqa: E402
+from shared import upstream  # noqa: E402
 from shared.contracts import validate_event  # noqa: E402
 from shared.events import Envelope  # noqa: E402
 
@@ -227,14 +228,14 @@ def test_the_worker_dead_letters_a_malformed_request(isolated):
 def test_a_missing_crawl_is_not_retryable(monkeypatch):
     """404 means the id is wrong or belongs to someone else. Retrying that
     forever is how a queue fills up with work that can never succeed."""
-    monkeypatch.setattr(source.requests, "get", lambda *a, **kw: _Response(404))
+    monkeypatch.setattr(upstream.requests, "get", lambda *a, **kw: _Response(404))
     with pytest.raises(source.UnknownCrawl):
         REAL_FETCH("nope")
 
 
 def test_a_crawl_still_running_is_retryable(monkeypatch):
     monkeypatch.setattr(
-        source.requests, "get",
+        upstream.requests, "get",
         lambda *a, **kw: _Response(200, {"status": "running", "report": None}),
     )
     with pytest.raises(source.ReportUnavailable):
@@ -242,7 +243,7 @@ def test_a_crawl_still_running_is_retryable(monkeypatch):
 
 
 def test_an_unreachable_crawl_service_is_retryable(monkeypatch):
-    monkeypatch.setattr(source.requests, "get", _raise(ConnectionError("refused")))
+    monkeypatch.setattr(upstream.requests, "get", _raise(ConnectionError("refused")))
     with pytest.raises(source.ReportUnavailable):
         REAL_FETCH("crawl-1")
 
@@ -256,7 +257,7 @@ def test_the_tenant_travels_with_the_fetch(monkeypatch):
         seen["params"] = params
         return _Response(200, {"report": REPORT})
 
-    monkeypatch.setattr(source.requests, "get", capture)
+    monkeypatch.setattr(upstream.requests, "get", capture)
     REAL_FETCH("crawl-1", "tenant-a")
     assert seen["params"] == {"tenant_id": "tenant-a"}
 

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/content.analyzed.json",
+  "title": "content.analyzed",
+  "description": "A content coverage analysis finished. Carries the headline numbers and the biggest gaps; the full lists stay behind the result url.",
+  "type": "object",
+  "required": ["analysis_id", "crawl_id", "status", "result_url"],
+  "additionalProperties": false,
+  "properties": {
+    "analysis_id": {"type": "string", "format": "uuid"},
+    "crawl_id": {"type": "string"},
+    "research_id": {"type": "string"},
+    "status": {"enum": ["completed", "failed"]},
+    "error": {"type": ["string", "null"]},
+    "pages": {"type": "integer", "minimum": 0},
+    "keywords": {"type": "integer", "minimum": 0},
+    "covered": {"type": "integer", "minimum": 0},
+    "coverage": {"type": "number", "minimum": 0, "maximum": 100},
+    "gap_count": {"type": "integer", "minimum": 0},
+    "cannibalisation_count": {"type": "integer", "minimum": 0},
+    "top_gaps": {
+      "type": "array",
+      "maxItems": 10,
+      "description": "Keywords with no page targeting them, highest demand first.",
+      "items": {
+        "type": "object",
+        "required": ["keyword"],
+        "additionalProperties": false,
+        "properties": {
+          "keyword": {"type": "string"},
+          "demand": {"type": "integer"}
+        }
+      }
+    },
+    "result_url": {"type": "string"}
+  }
+}

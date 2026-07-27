@@ -29,6 +29,10 @@ CATEGORY_WEIGHT = {
 # stop before a report grows past what a browser can open.
 MAX_EDGES = 50_000
 
+# Headings kept per page. A page declares what it is about in its first few;
+# a navigation menu rendered as headings can run to hundreds.
+MAX_HEADINGS = 20
+
 
 @dataclass
 class CategoryScore:
@@ -80,6 +84,15 @@ class Report:
                     "load_ms": p.elapsed_ms,
                     # Lets consumers of page.updated skip work when nothing changed.
                     "content_hash": p.content_hash,
+                    # What the page says it is about. Title, description and
+                    # headings are where a page declares its target — the body
+                    # text is not carried, because it is the whole crawl again
+                    # and the declaration is what a coverage question needs.
+                    "description": p.meta_description,
+                    "headings": [
+                        {"level": level, "text": text}
+                        for level, text in p.headings[:MAX_HEADINGS]
+                    ],
                 }
                 for p in self.site.pages
             ],

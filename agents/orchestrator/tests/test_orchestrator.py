@@ -116,14 +116,33 @@ def links_done(job_id: str, status: str = "completed", error: str | None = None)
     }
 
 
-def drive(store, workflow_id, through: int = 4) -> None:
+def content_done(job_id: str, status: str = "completed", error: str | None = None) -> dict:
+    return {
+        "analysis_id": job_id,
+        "crawl_id": "crawl-1",
+        "research_id": "research-1",
+        "status": status,
+        "error": error,
+        "pages": 3,
+        "keywords": 4,
+        "covered": 3,
+        "coverage": 75.0,
+        "gap_count": 1,
+        "cannibalisation_count": 1,
+        "top_gaps": [{"keyword": "کفش کوهنوردی", "demand": 700}],
+        "result_url": f"/v1/content-analyses/{job_id}",
+    }
+
+
+def drive(store, workflow_id, through: int = 5) -> None:
     """Feed a workflow the completion events for its first `through` steps.
 
     One place that knows the running order, so adding a fifth step later means
     changing this rather than every test that drives a workflow to the end.
     """
-    events = ["crawl.completed", "keyword.researched", "serp.checked", "links.analyzed"]
-    payloads = [crawl_done, research_done, serp_done, links_done]
+    events = ["crawl.completed", "keyword.researched", "serp.checked",
+              "links.analyzed", "content.analyzed"]
+    payloads = [crawl_done, research_done, serp_done, links_done, content_done]
 
     for index in range(through):
         step = store.get(workflow_id).step_at(index + 1)
@@ -144,7 +163,8 @@ def started(store, inputs=None) -> str:
 def test_a_site_audit_crawls_then_researches_then_checks_rankings():
     steps = planner.plan("site_audit", AUDIT)
     assert [(s.position, s.kind) for s in steps] == [
-        (1, "crawl"), (2, "keyword_research"), (3, "serp_check"), (4, "link_analysis")
+        (1, "crawl"), (2, "keyword_research"), (3, "serp_check"),
+        (4, "link_analysis"), (5, "content_analysis"),
     ]
 
 
@@ -185,7 +205,7 @@ def test_starting_dispatches_only_the_first_step(store, conn):
 
     assert workflow.status == "running"
     assert [s.status for s in workflow.steps] == [
-        "dispatched", "pending", "pending", "pending"
+        "dispatched", "pending", "pending", "pending", "pending"
     ]
 
     # The second step must not have been asked for yet.
@@ -219,7 +239,7 @@ def test_finishing_a_step_dispatches_the_next(store, conn):
 
     workflow = store.get(workflow_id)
     assert [s.status for s in workflow.steps] == [
-        "completed", "dispatched", "pending", "pending"
+        "completed", "dispatched", "pending", "pending", "pending"
     ]
     types = [r[0] for r in conn.execute("SELECT event_type FROM outbox ORDER BY id").fetchall()]
     assert types == ["crawl.requested", "keyword.research_requested"]
@@ -255,6 +275,7 @@ def test_the_last_step_completes_the_workflow(store):
     assert workflow.report["headline"] == {
         "overall_score": 73, "total_issues": 9, "keywords_found": 128,
         "keywords_ranked": 2, "average_position": 3.5, "orphan_pages": 1,
+        "keyword_coverage": 75.0,
     }
 
 
@@ -267,7 +288,7 @@ def test_completion_emits_a_contract_valid_event(store, conn):
     ).fetchone()[0]
     validate_event("workflow.completed", payload)
     assert payload["status"] == "completed"
-    assert [s["status"] for s in payload["steps"]] == ["completed"] * 4
+    assert [s["status"] for s in payload["steps"]] == ["completed"] * 5
 
 
 def test_the_report_links_to_results_rather_than_copying_them(store):
@@ -440,7 +461,7 @@ def test_the_worker_ignores_a_workflow_it_already_started(store, monkeypatch):
 
     with psycopg.connect(DSN, autocommit=True) as c:
         assert c.execute("SELECT count(*) FROM workflow_steps WHERE workflow_id = %s",
-                         (workflow_id,)).fetchone()[0] == 4
+                         (workflow_id,)).fetchone()[0] == 5
 
 
 def test_the_worker_dead_letters_a_malformed_request(store, monkeypatch):
@@ -470,7 +491,7 @@ def test_the_worker_advances_on_a_completion_event(store, monkeypatch):
     ))
 
     assert [s.status for s in store.get(workflow_id).steps] == [
-        "completed", "dispatched", "pending", "pending"
+        "completed", "dispatched", "pending", "pending", "pending"
     ]
 
 
@@ -505,7 +526,7 @@ def test_the_api_runs_a_workflow_end_to_end(store, monkeypatch):
     body = client.get(f"/v1/workflows/{workflow_id}").json()
     assert body["status"] == "running"
     assert [s["kind"] for s in body["steps"]] == [
-        "crawl", "keyword_research", "serp_check", "link_analysis"
+        "crawl", "keyword_research", "serp_check", "link_analysis", "content_analysis"
     ]
 
     assert any(w["workflow_id"] == workflow_id for w in client.get("/v1/workflows").json())
@@ -586,7 +607,7 @@ def test_research_finding_nothing_skips_the_check_rather_than_failing(store, con
     workflow = store.get(workflow_id)
     assert workflow.status == "completed"
     assert [s.status for s in workflow.steps] == [
-        "completed", "completed", "skipped", "completed"
+        "completed", "completed", "skipped", "completed", "completed"
     ]
     # The crawl's findings survive.
     assert workflow.report["headline"]["overall_score"] == 73
@@ -723,7 +744,7 @@ def test_a_failed_workflow_is_summarised_too(store):
 def test_the_report_lists_its_steps(store):
     steps = store.get(finished(store)).report["steps"]
     assert [s["kind"] for s in steps] == [
-        "crawl", "keyword_research", "serp_check", "link_analysis"
+        "crawl", "keyword_research", "serp_check", "link_analysis", "content_analysis"
     ]
 
 
@@ -923,3 +944,58 @@ def test_the_summary_says_what_the_links_look_like(store):
     # The cheapest piece of work a link graph can name, so it belongs in the
     # action list rather than only in the numbers.
     assert any("لینک" in a["action"] for a in summary["next_actions"])
+
+
+# ---------------------------------------------------- the content analysis
+
+
+def test_the_content_step_is_told_about_both_earlier_steps(store, conn):
+    """The only step in the plan that needs two earlier ones at once: what
+    pages exist, and what people search for."""
+    workflow_id = started(store)
+    steps = store.get(workflow_id).steps
+    drive(store, workflow_id, through=4)
+
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE event_type='content.analysis_requested'"
+    ).fetchone()[0]
+    validate_event("content.analysis_requested", payload)
+    assert payload["crawl_id"] == steps[0].job_id
+    assert payload["research_id"] == steps[1].job_id
+
+
+def test_without_a_keyword_study_the_content_step_is_skipped_not_failed(store, conn):
+    """A site with no keywords is a real answer about that site. There is no
+    coverage question to ask, which is not the same as something breaking."""
+    workflow_id = started(store)
+    steps = store.get(workflow_id).steps
+    engine.on_completion(store, "crawl.completed", crawl_done(steps[0].job_id))
+
+    empty = research_done(steps[1].job_id)
+    empty["top_keywords"] = []
+    empty["total"] = 0
+    engine.on_completion(store, "keyword.researched", empty)
+    drive(store, workflow_id)
+
+    workflow = store.get(workflow_id)
+    assert workflow.status == "completed"
+    assert workflow.step_at(5).status in ("completed", "skipped")
+
+
+def test_the_coverage_findings_reach_the_final_report(store):
+    workflow_id = started(store)
+    drive(store, workflow_id)
+
+    report = store.get(workflow_id).report
+    assert report["content"]["coverage"] == 75.0
+    assert report["headline"]["keyword_coverage"] == 75.0
+    assert report["content"]["top_gaps"][0]["keyword"] == "کفش کوهنوردی"
+
+
+def test_the_summary_names_the_missing_page(store):
+    workflow_id = started(store)
+    drive(store, workflow_id)
+
+    summary = store.get(workflow_id).report["summary"]
+    assert "پوشش" in summary["text_fa"]
+    assert any("کفش کوهنوردی" in action["action"] for action in summary["next_actions"])

@@ -55,6 +55,7 @@ describe('labels', () => {
     expect(stepLabel('keyword_research')).toBe('تحقیق کلمات کلیدی')
     expect(stepLabel('serp_check')).toBe('بررسی جایگاه')
     expect(stepLabel('link_analysis')).toBe('تحلیل لینک داخلی')
+    expect(stepLabel('content_analysis')).toBe('پوشش محتوا')
   })
 })
 

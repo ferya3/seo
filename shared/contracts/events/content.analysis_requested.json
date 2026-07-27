@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/content.analysis_requested.json",
+  "title": "content.analysis_requested",
+  "description": "Compare a finished crawl against a finished keyword study. Published by the gateway or the orchestrator; consumed by the content service, which fetches both reports itself rather than receiving them here.",
+  "type": "object",
+  "required": ["crawl_id", "research_id"],
+  "additionalProperties": false,
+  "properties": {
+    "analysis_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Allocated by the caller so the result url is known before the work starts."
+    },
+    "crawl_id": {"type": "string", "format": "uuid"},
+    "research_id": {"type": "string", "format": "uuid"}
+  }
+}
