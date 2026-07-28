@@ -43,8 +43,7 @@ abstract class ServiceClient
         protected readonly string $baseUrl,
         protected readonly int $timeout,
         protected readonly string $name,
-    ) {
-    }
+    ) {}
 
     protected function request(): PendingRequest
     {

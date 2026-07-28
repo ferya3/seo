@@ -18,9 +18,7 @@ final class SerpController extends Controller
 {
     use ResolvesProject;
 
-    public function __construct(private readonly SerpServiceClient $serp)
-    {
-    }
+    public function __construct(private readonly SerpServiceClient $serp) {}
 
     public function store(Request $request): JsonResponse
     {

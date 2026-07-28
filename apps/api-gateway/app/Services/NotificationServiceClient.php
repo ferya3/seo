@@ -69,7 +69,7 @@ final class NotificationServiceClient extends ServiceClient
     }
 
     /**
-     * @return array<string, mixed>|null  null when the channel id is unknown
+     * @return array<string, mixed>|null null when the channel id is unknown
      *
      * @throws ServiceUnavailable
      */

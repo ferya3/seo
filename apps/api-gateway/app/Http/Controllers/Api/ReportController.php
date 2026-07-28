@@ -23,9 +23,7 @@ final class ReportController extends Controller
      *  forwarded, so a typo comes back as 422 and not as an empty download. */
     private const FORMATS = ['html', 'md'];
 
-    public function __construct(private readonly ReportingServiceClient $reports)
-    {
-    }
+    public function __construct(private readonly ReportingServiceClient $reports) {}
 
     public function store(Request $request): JsonResponse
     {

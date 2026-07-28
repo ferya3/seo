@@ -47,7 +47,7 @@ final class CrawlServiceClient extends ServiceClient
     }
 
     /**
-     * @return array<string, mixed>|null  null when the crawl id is unknown
+     * @return array<string, mixed>|null null when the crawl id is unknown
      *
      * @throws ServiceUnavailable
      */

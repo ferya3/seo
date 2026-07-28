@@ -41,7 +41,7 @@ final class CompetitorServiceClient extends ServiceClient
     }
 
     /**
-     * @return array<string, mixed>|null  null when the comparison id is unknown
+     * @return array<string, mixed>|null null when the comparison id is unknown
      *
      * @throws ServiceUnavailable
      */

@@ -45,7 +45,6 @@ return [
         'timeout' => (int) env('CRAWL_SERVICE_TIMEOUT', 10),
     ],
 
-
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

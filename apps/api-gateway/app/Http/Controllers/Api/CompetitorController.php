@@ -28,9 +28,7 @@ final class CompetitorController extends Controller
      *  translated. */
     private const MAX_COMPETITORS = 8;
 
-    public function __construct(private readonly CompetitorServiceClient $competitors)
-    {
-    }
+    public function __construct(private readonly CompetitorServiceClient $competitors) {}
 
     public function store(Request $request): JsonResponse
     {

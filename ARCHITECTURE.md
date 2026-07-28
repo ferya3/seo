@@ -59,6 +59,7 @@ pytest                       # ۵۷۶ پاس، ۱۵۹ skip
 ```bash
 createdb seo
 DATABASE_URL=postgresql://seo@127.0.0.1/seo infra/db/migrate.sh
+# روی دیتابیسی که قبلاً دستی مهاجرت شده: MIGRATE_BASELINE=1 ... (infra/db/README.md)
 TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo pytest    # ۷۵۸ تست
 ```
 
@@ -490,6 +491,7 @@ API هم کار می‌کند» را عوض می‌کند: لایه‌ی قان�
 ```bash
 createdb seo
 DATABASE_URL=postgresql://seo@127.0.0.1/seo infra/db/migrate.sh
+# روی دیتابیسی که قبلاً دستی مهاجرت شده: MIGRATE_BASELINE=1 ... (infra/db/README.md)
 
 cd apps/api-gateway
 composer install

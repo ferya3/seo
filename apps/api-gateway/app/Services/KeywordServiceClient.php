@@ -47,7 +47,7 @@ final class KeywordServiceClient extends ServiceClient
     }
 
     /**
-     * @return array<string, mixed>|null  null when the research id is unknown
+     * @return array<string, mixed>|null null when the research id is unknown
      *
      * @throws ServiceUnavailable
      */

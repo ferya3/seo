@@ -6,7 +6,9 @@ namespace Tests\Feature;
 
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -23,7 +25,6 @@ final class CrawlApiTest extends TestCase
         'status' => 'queued',
         'result_url' => '/v1/crawls/11111111-2222-3333-4444-555555555555',
     ];
-
 
     /**
      * The tenant is a real row now, not a made-up uuid: users.tenant_id has a
@@ -129,7 +130,7 @@ final class CrawlApiTest extends TestCase
     /**
      * @param  array<string, mixed>  $body
      */
-    #[\PHPUnit\Framework\Attributes\DataProvider('badRequests')]
+    #[DataProvider('badRequests')]
     public function test_bad_input_is_rejected_before_the_service_is_called(array $body): void
     {
         Http::fake();
@@ -162,7 +163,7 @@ final class CrawlApiTest extends TestCase
 
     public function test_an_unreachable_service_is_a_503_not_a_500(): void
     {
-        Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('refused'));
+        Http::fake(fn () => throw new ConnectionException('refused'));
 
         $this->actingAs($this->user(), 'sanctum')
             ->postJson('/api/v1/crawls', ['start_url' => 'https://example.com'])
@@ -172,7 +173,7 @@ final class CrawlApiTest extends TestCase
 
     public function test_an_unreachable_service_on_read_is_also_a_503(): void
     {
-        Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('refused'));
+        Http::fake(fn () => throw new ConnectionException('refused'));
 
         $this->actingAs($this->user(), 'sanctum')
             ->getJson('/api/v1/crawls/'.self::ACCEPTED['crawl_id'])
@@ -253,6 +254,7 @@ final class CrawlApiTest extends TestCase
             ->postJson('/api/v1/crawls', ['start_url' => 'https://example.com'])
             ->assertStatus(202);
     }
+
     public function test_reading_a_crawl_asks_only_for_the_callers_own(): void
     {
         // Reads used to carry no tenant at all: any id read any account's data.
@@ -275,5 +277,4 @@ final class CrawlApiTest extends TestCase
 
         Http::assertSent(fn ($request) => str_contains($request->url(), 'tenant_id='.$tenant->id));
     }
-
 }

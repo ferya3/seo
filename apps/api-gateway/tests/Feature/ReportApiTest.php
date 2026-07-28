@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -126,7 +127,7 @@ final class ReportApiTest extends TestCase
     public function test_an_unreachable_reporting_service_is_503(): void
     {
         [$user] = $this->actor();
-        Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('refused'));
+        Http::fake(fn () => throw new ConnectionException('refused'));
 
         $this->actingAs($user, 'sanctum')
             ->getJson('/api/v1/reports')

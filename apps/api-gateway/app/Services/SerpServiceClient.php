@@ -38,7 +38,7 @@ final class SerpServiceClient extends ServiceClient
     }
 
     /**
-     * @return array<string, mixed>|null  null when the check id is unknown
+     * @return array<string, mixed>|null null when the check id is unknown
      *
      * @throws ServiceUnavailable
      */

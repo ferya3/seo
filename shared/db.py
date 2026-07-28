@@ -84,7 +84,7 @@ class PostgresJobStore(Generic[R]):
     stages_events = True
 
     def __init__(self, dsn: str, table: JobTable, record_cls: type[R]):
-        psycopg, _ = _psycopg()
+        _psycopg()          # raises with an install hint if psycopg is missing
         from psycopg_pool import ConnectionPool
 
         self.table = table

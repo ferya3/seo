@@ -217,6 +217,7 @@ final class AuthTest extends TestCase
             ->assertOk()
             ->assertJson(['tenant_id' => $tenant->id]);
     }
+
     public function test_an_unauthenticated_request_is_401_even_without_an_accept_header(): void
     {
         /*
@@ -230,5 +231,4 @@ final class AuthTest extends TestCase
         $response->assertStatus(401);
         $this->assertStringContainsString('Unauthenticated', $response->getContent());
     }
-
 }

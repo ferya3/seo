@@ -744,9 +744,9 @@ def test_the_tracked_count_reaches_the_plan(store, conn, monkeypatch):
 # ---------------------------------------------------------------- the summary
 
 
-def finished(store) -> str:
+def finished(store, inputs=None) -> str:
     """A workflow taken all the way to completed."""
-    workflow_id = started(store)
+    workflow_id = started(store, inputs)
     drive(store, workflow_id)
     return workflow_id
 
@@ -1313,13 +1313,6 @@ def test_www_and_a_trailing_path_still_mean_one_competitor():
 
 
 # ------------------------------------------------------------------- trends
-
-
-def finished(store, inputs=None) -> str:
-    """A workflow driven all the way to completed."""
-    workflow_id = started(store, inputs or dict(AUDIT))
-    drive(store, workflow_id)
-    return workflow_id
 
 
 def test_the_first_audit_of_a_site_has_no_trend(store):

@@ -40,7 +40,7 @@ final class OrchestratorClient extends ServiceClient
     }
 
     /**
-     * @return array<string, mixed>|null  null when the workflow id is unknown
+     * @return array<string, mixed>|null null when the workflow id is unknown
      *
      * @throws ServiceUnavailable
      */
@@ -89,7 +89,7 @@ final class OrchestratorClient extends ServiceClient
     }
 
     /**
-     * @return array<string, mixed>|null  null when the schedule id is unknown
+     * @return array<string, mixed>|null null when the schedule id is unknown
      *
      * @throws ServiceUnavailable
      */
@@ -141,7 +141,7 @@ final class OrchestratorClient extends ServiceClient
     /**
      * Every finished audit of the same site, headlines only.
      *
-     * @return array<string, mixed>|null  null when the workflow id is unknown
+     * @return array<string, mixed>|null null when the workflow id is unknown
      *
      * @throws ServiceUnavailable
      */

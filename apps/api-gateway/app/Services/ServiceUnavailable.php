@@ -7,6 +7,4 @@ namespace App\Services;
 use RuntimeException;
 
 /** A backend service could not be reached, or returned 5xx. Retryable. */
-final class ServiceUnavailable extends RuntimeException
-{
-}
+final class ServiceUnavailable extends RuntimeException {}

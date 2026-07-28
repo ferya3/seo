@@ -7,7 +7,9 @@ namespace Tests\Feature;
 use App\Models\Project;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -118,7 +120,7 @@ final class WorkflowApiTest extends TestCase
     /**
      * @param  array<string, mixed>  $body
      */
-    #[\PHPUnit\Framework\Attributes\DataProvider('badRequests')]
+    #[DataProvider('badRequests')]
     public function test_bad_input_is_rejected_before_the_orchestrator_is_called(array $body): void
     {
         [$user] = $this->actor();
@@ -143,7 +145,7 @@ final class WorkflowApiTest extends TestCase
     public function test_an_unreachable_orchestrator_is_a_503(): void
     {
         [$user] = $this->actor();
-        Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('refused'));
+        Http::fake(fn () => throw new ConnectionException('refused'));
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/v1/workflows', ['start_url' => 'https://example.com'])
@@ -196,6 +198,7 @@ final class WorkflowApiTest extends TestCase
             ->postJson('/api/v1/workflows', ['start_url' => 'https://example.com'])
             ->assertStatus(429);
     }
+
     public function test_reading_a_workflow_asks_only_for_the_callers_own(): void
     {
         /*
@@ -235,7 +238,6 @@ final class WorkflowApiTest extends TestCase
             ->getJson('/api/v1/workflows/somebody-elses-id')
             ->assertNotFound();
     }
-
 
     public function test_history_is_scoped_to_the_caller(): void
     {

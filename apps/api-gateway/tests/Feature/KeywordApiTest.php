@@ -6,7 +6,9 @@ namespace Tests\Feature;
 
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -22,7 +24,6 @@ final class KeywordApiTest extends TestCase
         'status' => 'queued',
         'result_url' => '/v1/research/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
     ];
-
 
     /**
      * The tenant is a real row now, not a made-up uuid: users.tenant_id has a
@@ -101,7 +102,7 @@ final class KeywordApiTest extends TestCase
     /**
      * @param  array<string, mixed>  $body
      */
-    #[\PHPUnit\Framework\Attributes\DataProvider('badRequests')]
+    #[DataProvider('badRequests')]
     public function test_bad_input_is_rejected_before_the_service_is_called(array $body): void
     {
         Http::fake();
@@ -113,7 +114,7 @@ final class KeywordApiTest extends TestCase
 
     public function test_an_unreachable_service_is_a_503(): void
     {
-        Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('refused'));
+        Http::fake(fn () => throw new ConnectionException('refused'));
 
         $this->actingAs($this->user(), 'sanctum')
             ->postJson('/api/v1/research', ['seed' => 'کفش'])
@@ -157,6 +158,7 @@ final class KeywordApiTest extends TestCase
 
         $this->actingAs($user, 'sanctum')->postJson('/api/v1/research', ['seed' => 'کفش'])->assertStatus(429);
     }
+
     public function test_reading_a_research_asks_only_for_the_callers_own(): void
     {
         // Reads used to carry no tenant at all: any id read any account's data.
@@ -179,5 +181,4 @@ final class KeywordApiTest extends TestCase
 
         Http::assertSent(fn ($request) => str_contains($request->url(), 'tenant_id='.$tenant->id));
     }
-
 }

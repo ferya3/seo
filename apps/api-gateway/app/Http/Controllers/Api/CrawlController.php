@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\RequestRejected;
 use App\Services\CrawlServiceClient;
+use App\Services\RequestRejected;
 use App\Services\ServiceUnavailable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,9 +22,7 @@ final class CrawlController extends Controller
 {
     use ResolvesProject;
 
-    public function __construct(private readonly CrawlServiceClient $crawls)
-    {
-    }
+    public function __construct(private readonly CrawlServiceClient $crawls) {}
 
     public function store(Request $request): JsonResponse
     {

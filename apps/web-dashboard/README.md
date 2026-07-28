@@ -6,6 +6,7 @@
 ```bash
 npm install --legacy-peer-deps
 npm test                                   # ۳۵ تست، بدون مرورگر
+npm run typecheck                          # vue-tsc روی SFCها و ts
 npm run dev                                # http://localhost:3000
 
 # ساخت و اجرای نسخه‌ی نهایی

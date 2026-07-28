@@ -95,7 +95,7 @@ class Workflow:
 
 class WorkflowStore:
     def __init__(self, dsn: str):
-        psycopg, _ = _psycopg()
+        _psycopg()          # raises with an install hint if psycopg is missing
         from psycopg_pool import ConnectionPool
 
         self.pool = ConnectionPool(dsn, min_size=1, max_size=8, open=False, timeout=10)

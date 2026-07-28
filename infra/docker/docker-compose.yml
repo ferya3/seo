@@ -40,7 +40,12 @@ services:
       DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
     volumes:
       - ../db:/db:ro
-    command: ["sh", "/db/migrate.sh"]
+    # The image's entrypoint is postgres's own, which initialises a data
+    # directory when its first argument is `postgres` and execs anything else.
+    # Relying on that fall-through is a bet on a script we do not own, so it is
+    # replaced outright: this container is here for psql, nothing more.
+    entrypoint: ["sh"]
+    command: ["/db/migrate.sh"]
     depends_on:
       postgres: {condition: service_healthy}
 

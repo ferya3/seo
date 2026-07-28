@@ -16,7 +16,7 @@ import traceback
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +32,11 @@ class Job:
     total: int = 0
     result: dict[str, Any] | None = None
     error: str | None = None
-    created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    # Timezone-aware, like every other timestamp in the system. A naive local
+    # time is one that means something different depending on who reads it.
+    created_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    )
 
     def to_dict(self) -> dict[str, Any]:
         percent = 0

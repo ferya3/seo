@@ -43,7 +43,7 @@ final class ReportingServiceClient extends ServiceClient
     }
 
     /**
-     * @return array<string, mixed>|null  null when the report id is unknown
+     * @return array<string, mixed>|null null when the report id is unknown
      *
      * @throws ServiceUnavailable
      */

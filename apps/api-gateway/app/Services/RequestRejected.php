@@ -11,6 +11,4 @@ use RuntimeException;
  * target, a seed it cannot use. The caller's problem, not an outage, so it
  * must not be retried and must keep the service's own explanation.
  */
-final class RequestRejected extends RuntimeException
-{
-}
+final class RequestRejected extends RuntimeException {}

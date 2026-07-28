@@ -21,9 +21,7 @@ final class WorkflowController extends Controller
 {
     use ResolvesProject;
 
-    public function __construct(private readonly OrchestratorClient $orchestrator)
-    {
-    }
+    public function __construct(private readonly OrchestratorClient $orchestrator) {}
 
     public function store(Request $request): JsonResponse
     {

@@ -22,9 +22,7 @@ final class NotificationController extends Controller
 {
     use ResolvesProject;
 
-    public function __construct(private readonly NotificationServiceClient $notifications)
-    {
-    }
+    public function __construct(private readonly NotificationServiceClient $notifications) {}
 
     public function store(Request $request): JsonResponse
     {
