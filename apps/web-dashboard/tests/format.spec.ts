@@ -64,6 +64,10 @@ describe('labels', () => {
     expect(stepLabel('link_analysis')).toBe('تحلیل لینک داخلی')
     expect(stepLabel('content_analysis')).toBe('پوشش محتوا')
     expect(stepLabel('optimizer_plan')).toBe('پیشنهاد بازنویسی')
+    // A workflow can now contain four crawls; only one of them is yours, and
+    // the steps table is where a reader tells them apart.
+    expect(stepLabel('competitor_crawl')).toBe('خزش سایت رقیب')
+    expect(stepLabel('competitor_check')).toBe('مقایسه با رقبا')
   })
 })
 

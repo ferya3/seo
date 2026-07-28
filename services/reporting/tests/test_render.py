@@ -10,6 +10,7 @@ else's website cannot run script in the reader's browser.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -193,3 +194,52 @@ def test_an_empty_workflow_still_produces_a_valid_page():
     page = render.document({})
     assert page.startswith("<!doctype html>")
     assert page.rstrip().endswith("</html>")
+
+
+# --------------------------------------------------------------- competitors
+
+
+def with_rivals() -> dict:
+    """A workflow that also compared itself with two competitors."""
+    workflow = json.loads(json.dumps(WORKFLOW))
+    workflow["steps"] += [
+        {"position": 7, "kind": "competitor_crawl", "status": "completed", "error": None},
+        {"position": 8, "kind": "competitor_crawl", "status": "failed",
+         "error": "connection refused"},
+        {"position": 9, "kind": "competitor_check", "status": "completed", "error": None},
+    ]
+    workflow["report"]["headline"]["competitors_compared"] = 1
+    workflow["report"]["headline"]["behind_on"] = 2
+    workflow["report"]["competitors"] = {
+        "compared_against": 1,
+        "behind_on": ["described", "thin"],
+        "top_missing_themes": ["ماراتن", "راهنمای خرید"],
+    }
+    return workflow
+
+
+def test_the_missing_themes_reach_both_formats():
+    text = render.markdown(with_rivals())
+    html = render.document(with_rivals())
+
+    assert "ماراتن" in text and "ماراتن" in html
+    assert "رقیب مقایسه‌شده" in text and "رقیب مقایسه‌شده" in html
+
+
+def test_the_document_says_how_many_competitors_the_verdict_rests_on():
+    # One rival compared is a much weaker statement than four, and the reader
+    # cannot judge the section without knowing which.
+    html = render.document(with_rivals())
+    assert "1 رقیب مقایسه شد" in html
+
+
+def test_a_competitor_crawl_that_failed_is_named_in_persian_not_by_its_kind():
+    html = render.document(with_rivals())
+    assert "خزش سایت رقیب" in html
+    assert "competitor_crawl" not in html
+
+
+def test_a_report_without_competitors_has_no_competitor_section():
+    html = render.document(WORKFLOW)
+    assert "رقبا پوشش می‌دهند" not in html
+    assert "رقیب مقایسه‌شده" not in html

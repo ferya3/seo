@@ -149,6 +149,22 @@ def plan_done(job_id: str, status: str = "completed", error: str | None = None) 
     }
 
 
+def comparison_done(job_id: str, status: str = "completed", error: str | None = None) -> dict:
+    return {
+        "comparison_id": job_id,
+        "crawl_id": "crawl-1",
+        "competitor_crawl_ids": ["crawl-2", "crawl-3"],
+        "status": status,
+        "error": error,
+        "compared_against": 2,
+        "behind_on": ["described", "thin"],
+        "ahead_on": [],
+        "missing_theme_count": 6,
+        "top_missing_themes": ["ماراتن", "راهنمای"],
+        "result_url": f"/v1/comparisons/{job_id}",
+    }
+
+
 def drive(store, workflow_id, through: int = 6) -> None:
     """Feed a workflow the completion events for its first `through` steps.
 
@@ -1083,3 +1099,214 @@ def test_the_rewrite_plan_reaches_the_final_report(store):
     assert report["optimizer"]["pages_with_fixes"] == 2
     assert report["headline"]["pages_to_rewrite"] == 2
     assert "پیشنهاد" in report["summary"]["text_fa"] or "اصلاح" in report["summary"]["text_fa"]
+
+
+# ------------------------------------------------------------- competitors
+
+
+RIVALS = {**AUDIT, "competitors": ["https://rival-one.test", "rival-two.test"]}
+
+
+def drive_rivals(store, workflow_id) -> list:
+    """Run the six ordinary steps, then each competitor crawl, then compare."""
+    drive(store, workflow_id)
+    # One at a time: the competitors are separate steps, so the next one is
+    # only dispatched once the previous has come back.
+    for _ in range(planner.MAX_COMPETITORS):
+        pending = next(
+            (s for s in store.get(workflow_id).steps
+             if s.kind == "competitor_crawl" and s.status == "dispatched"), None,
+        )
+        if pending is None:
+            break
+        engine.on_completion(store, "crawl.completed", crawl_done(pending.job_id))
+    workflow = store.get(workflow_id)
+    check = next(s for s in workflow.steps if s.kind == "competitor_check")
+    if check.status == "dispatched":
+        engine.on_completion(store, "competitor.compared", comparison_done(check.job_id))
+    return store.get(workflow_id).steps
+
+
+def test_each_competitor_becomes_its_own_crawl_step():
+    steps = planner.plan("site_audit", RIVALS)
+    assert [(s.position, s.kind) for s in steps][6:] == [
+        (7, "competitor_crawl"), (8, "competitor_crawl"), (9, "competitor_check"),
+    ]
+    # The url is on the step, not derivable from the workflow's inputs.
+    assert steps[6].params["start_url"] == "https://rival-one.test"
+    # A bare host is still a site to crawl.
+    assert steps[7].params["start_url"] == "https://rival-two.test"
+
+
+def test_no_competitors_means_no_extra_steps_at_all():
+    # Not an empty comparison step: a comparison against nobody is a section of
+    # zeros that reads as "you are level with the market".
+    assert len(planner.plan("site_audit", AUDIT)) == 6
+    assert len(planner.plan("site_audit", {**AUDIT, "competitors": []})) == 6
+
+
+def test_the_same_competitor_twice_is_crawled_once():
+    steps = planner.plan("site_audit", {
+        **AUDIT, "competitors": ["https://rival.test/a", "http://www.rival.test/b"],
+    })
+    assert sum(1 for s in steps if s.kind == "competitor_crawl") == 1
+
+
+def test_more_competitors_than_the_ceiling_are_dropped_not_crawled():
+    steps = planner.plan("site_audit", {
+        **AUDIT, "competitors": [f"https://rival{i}.test" for i in range(10)],
+    })
+    assert sum(1 for s in steps if s.kind == "competitor_crawl") == planner.MAX_COMPETITORS
+
+
+def test_competitors_are_crawled_shallower_than_your_own_site(store):
+    workflow_id = started(store, {**RIVALS, "max_pages": 500})
+    steps = {s.position: s for s in store.get(workflow_id).steps}
+
+    assert steps[1].params.get("max_pages") in (None, 500)
+    assert steps[7].params["max_pages"] == planner.DEFAULT_COMPETITOR_PAGES
+
+
+def test_a_competitor_crawl_is_dispatched_with_its_own_url(store, conn):
+    workflow_id = started(store, RIVALS)
+    drive(store, workflow_id)          # the six ordinary steps
+
+    rival = next(s for s in store.get(workflow_id).steps if s.kind == "competitor_crawl")
+    assert rival.status == "dispatched"
+
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE payload->>'crawl_id' = %s", (rival.job_id,)
+    ).fetchone()[0]
+    # Not the workflow's start_url, which is what a step-blind dispatch would
+    # have sent — and it would have crawled your own site four times.
+    assert payload["start_url"] == "https://rival-one.test"
+
+
+def test_the_comparison_gets_your_crawl_and_theirs(store, conn):
+    workflow_id = started(store, RIVALS)
+    drive(store, workflow_id)
+    workflow = store.get(workflow_id)
+    own = next(s for s in workflow.steps if s.kind == "crawl")
+    rivals = [s for s in workflow.steps if s.kind == "competitor_crawl"]
+
+    for step in rivals:
+        engine.on_completion(store, "crawl.completed", crawl_done(step.job_id))
+
+    check = next(s for s in store.get(workflow_id).steps if s.kind == "competitor_check")
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE payload->>'comparison_id' = %s", (check.job_id,)
+    ).fetchone()[0]
+
+    assert payload["crawl_id"] == own.job_id
+    assert payload["competitor_crawl_ids"] == [s.job_id for s in rivals]
+    validate_event("competitor.comparison_requested", payload)
+
+
+def test_a_competitor_being_down_does_not_fail_your_audit(store):
+    workflow_id = started(store, RIVALS)
+    drive(store, workflow_id)
+    workflow = store.get(workflow_id)
+    rivals = [s for s in workflow.steps if s.kind == "competitor_crawl"]
+
+    engine.on_completion(store, "crawl.completed",
+                         crawl_done(rivals[0].job_id, "failed", "connection refused"))
+    engine.on_completion(store, "crawl.completed", crawl_done(rivals[1].job_id))
+
+    check = next(s for s in store.get(workflow_id).steps if s.kind == "competitor_check")
+    engine.on_completion(store, "competitor.compared", comparison_done(check.job_id))
+
+    workflow = store.get(workflow_id)
+    assert workflow.status == "completed"
+    # The step still says what happened; the workflow does not inherit it.
+    failed = next(s for s in workflow.steps if s.job_id == rivals[0].job_id)
+    assert failed.status == "failed"
+    assert workflow.error is None
+
+
+def test_the_comparison_only_names_the_competitors_that_finished(store, conn):
+    workflow_id = started(store, RIVALS)
+    drive(store, workflow_id)
+    rivals = [s for s in store.get(workflow_id).steps if s.kind == "competitor_crawl"]
+
+    engine.on_completion(store, "crawl.completed", crawl_done(rivals[0].job_id, "failed", "gone"))
+    engine.on_completion(store, "crawl.completed", crawl_done(rivals[1].job_id))
+
+    check = next(s for s in store.get(workflow_id).steps if s.kind == "competitor_check")
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE payload->>'comparison_id' = %s", (check.job_id,)
+    ).fetchone()[0]
+    assert payload["competitor_crawl_ids"] == [rivals[1].job_id]
+
+
+def test_every_competitor_failing_skips_the_comparison(store):
+    workflow_id = started(store, RIVALS)
+    drive(store, workflow_id)
+    rivals = [s for s in store.get(workflow_id).steps if s.kind == "competitor_crawl"]
+    for step in rivals:
+        engine.on_completion(store, "crawl.completed", crawl_done(step.job_id, "failed", "gone"))
+
+    workflow = store.get(workflow_id)
+    check = next(s for s in workflow.steps if s.kind == "competitor_check")
+    # Skipped, not failed: there was nothing to compare, which is an answer.
+    assert check.status == "skipped"
+    assert "nothing to compare" in check.error
+    assert workflow.status == "completed"
+
+
+def test_your_own_crawl_is_still_the_one_the_other_steps_use(store, conn):
+    """The regression this whole change could have caused.
+
+    Four crawl steps now exist in one workflow. Every step that says "the
+    crawl" has to keep meaning yours, or the link graph, the coverage report
+    and the rewrite plan would all quietly describe a competitor's site.
+    """
+    workflow_id = started(store, RIVALS)
+    workflow = store.get(workflow_id)
+    own = next(s for s in workflow.steps if s.kind == "crawl")
+
+    engine.on_completion(store, "crawl.completed", crawl_done(own.job_id))
+    engine.on_completion(store, "keyword.researched",
+                         research_done(workflow.step_at(2).job_id))
+    engine.on_completion(store, "serp.checked", serp_done(workflow.step_at(3).job_id))
+
+    links = workflow.step_at(4)
+    payload = conn.execute(
+        "SELECT payload FROM outbox WHERE payload->>'analysis_id' = %s", (links.job_id,)
+    ).fetchone()[0]
+    assert payload["crawl_id"] == own.job_id
+
+
+def test_the_report_carries_the_comparison_and_the_headline_says_so(store):
+    workflow_id = started(store, RIVALS)
+    drive_rivals(store, workflow_id)
+
+    report = store.get(workflow_id).report
+    assert report["competitors"]["compared_against"] == 2
+    assert report["headline"]["competitors_compared"] == 2
+    assert report["headline"]["behind_on"] == 2
+
+
+def test_a_workflow_without_competitors_has_no_competitor_section(store):
+    workflow_id = started(store)
+    drive(store, workflow_id)
+
+    report = store.get(workflow_id).report
+    assert "competitors" not in report
+    assert "competitors_compared" not in report["headline"]
+
+
+def test_two_ports_on_one_host_are_two_competitors():
+    # Found live: both test sites sat on 127.0.0.1 and collapsed into one.
+    # Rare between real competitors, ordinary between two local sites, and
+    # wrong in both cases — different origins are different sites.
+    steps = planner.plan("site_audit", {
+        **AUDIT, "competitors": ["http://127.0.0.1:8501/", "http://127.0.0.1:8502/"],
+    })
+    assert sum(1 for s in steps if s.kind == "competitor_crawl") == 2
+
+
+def test_www_and_a_trailing_path_still_mean_one_competitor():
+    steps = planner.plan("site_audit", {
+        **AUDIT, "competitors": ["https://www.rival.test/pricing", "https://rival.test/"],
+    })
+    assert sum(1 for s in steps if s.kind == "competitor_crawl") == 1

@@ -101,6 +101,11 @@ class WorkflowInputs(BaseModel):
     # How many pages the rewrite plan covers. Bounded for the same reason:
     # every page is model tokens and work someone has to do.
     optimize_pages: int | None = Field(default=None, ge=1, le=planner.MAX_OPTIMIZED)
+    # Sites to compare against. Each one becomes a crawl of somebody else's
+    # site, run every time this workflow runs, which is why the ceiling is
+    # lower than the competitor service's own.
+    competitors: list[str] | None = Field(default=None, max_length=planner.MAX_COMPETITORS)
+    competitor_pages: int | None = Field(default=None, ge=1, le=planner.MAX_COMPETITOR_PAGES)
     lang: str = "fa"
     country: str = "IR"
 

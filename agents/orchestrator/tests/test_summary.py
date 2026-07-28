@@ -240,3 +240,35 @@ def test_enrich_never_raises(monkeypatch):
 def test_the_schema_offers_the_same_effort_words_the_rules_use(effort):
     assert effort in summary.SUMMARY_SCHEMA["properties"]["next_actions"]["items"][
         "properties"]["effort"]["enum"]
+
+
+def test_the_summary_says_where_the_site_stands_against_its_rivals():
+    report = {
+        "headline": {},
+        "competitors": {
+            "compared_against": 2,
+            "behind_on": ["described", "thin"],
+            "ahead_on": [],
+            "missing_theme_count": 6,
+            "top_missing_themes": ["ماراتن", "راهنمای"],
+        },
+    }
+    text = summary.deterministic(report)["text_fa"]
+
+    assert "2 رقیب" in text
+    assert "2 سنجه عقب" in text
+    assert "«ماراتن»" in text
+
+
+def test_no_rivals_means_no_sentence_about_them():
+    text = summary.deterministic({"headline": {}, "crawl": {"overall_score": 70}})["text_fa"]
+    assert "رقیب" not in text
+
+
+def test_being_level_is_said_out_loud_rather_than_left_silent():
+    # "Nothing to report" and "we checked and you are level" are different
+    # answers, and only one of them tells the reader the check happened.
+    report = {"headline": {}, "competitors": {
+        "compared_against": 3, "behind_on": [], "ahead_on": [], "top_missing_themes": [],
+    }}
+    assert "اختلاف معناداری نیست" in summary.deterministic(report)["text_fa"]

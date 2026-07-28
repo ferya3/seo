@@ -28,6 +28,8 @@ const STEP_FA: Record<string, string> = {
   link_analysis: 'تحلیل لینک داخلی',
   content_analysis: 'پوشش محتوا',
   optimizer_plan: 'پیشنهاد بازنویسی',
+  competitor_crawl: 'خزش سایت رقیب',
+  competitor_check: 'مقایسه با رقبا',
 }
 
 export function statusLabel(status: string): string {

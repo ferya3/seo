@@ -136,6 +136,20 @@
             "integer",
             "null"
           ]
+        },
+        "competitors_compared": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "How many competitors had a large enough sample to be judged against. Absent when the audit asked for none."
+        },
+        "behind_on": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "How many metrics sit below the competitors' median. Absent when there was no comparison."
         }
       }
     },

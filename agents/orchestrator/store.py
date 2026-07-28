@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -32,6 +32,10 @@ class Step:
     status: str
     error: str | None = None
     result: dict[str, Any] | None = None
+    # What this step was planned with. Empty for every step whose parameters
+    # follow from the workflow's inputs; set for the ones that do not, which
+    # today means the competitor crawls — each has its own start_url.
+    params: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -41,6 +45,7 @@ class Step:
             "status": self.status,
             "error": self.error,
             "result": self.result,
+            "params": self.params,
         }
 
 
@@ -109,7 +114,7 @@ class WorkflowStore:
         workflow_id: str,
         goal: str,
         inputs: dict[str, Any],
-        steps: list[tuple[int, str, str]],
+        steps: list[tuple[int, str, str, dict[str, Any]]],
         tenant_id: str | None = None,
         project_id: str | None = None,
     ) -> Workflow:
@@ -125,11 +130,12 @@ class WorkflowStore:
                 "VALUES (%s, %s, %s, %s, %s, 'queued')",
                 (workflow_id, tenant_id, project_id, goal, Jsonb(inputs)),
             )
-            for position, kind, job_id in steps:
+            for position, kind, job_id, params in steps:
                 conn.execute(
-                    "INSERT INTO workflow_steps (workflow_id, position, kind, job_id, status) "
-                    "VALUES (%s, %s, %s, %s, 'pending')",
-                    (workflow_id, position, kind, job_id),
+                    "INSERT INTO workflow_steps "
+                    "(workflow_id, position, kind, job_id, status, params) "
+                    "VALUES (%s, %s, %s, %s, 'pending', %s)",
+                    (workflow_id, position, kind, job_id, Jsonb(params or {})),
                 )
         return self.get(workflow_id)
 
@@ -305,9 +311,10 @@ def _load(conn, workflow_id: str) -> Workflow | None:
         return None
 
     steps = [
-        Step(position=s[0], kind=s[1], job_id=str(s[2]), status=s[3], error=s[4], result=s[5])
+        Step(position=s[0], kind=s[1], job_id=str(s[2]), status=s[3], error=s[4],
+             result=s[5], params=s[6] if isinstance(s[6], dict) else {})
         for s in conn.execute(
-            "SELECT position, kind, job_id, status, error, result FROM workflow_steps "
+            "SELECT position, kind, job_id, status, error, result, params FROM workflow_steps "
             "WHERE workflow_id = %s ORDER BY position",
             (workflow_id,),
         ).fetchall()

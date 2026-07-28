@@ -34,6 +34,8 @@ STEP_FA = {
     "link_analysis": "تحلیل لینک داخلی",
     "content_analysis": "پوشش محتوا",
     "optimizer_plan": "پیشنهاد بازنویسی",
+    "competitor_crawl": "خزش سایت رقیب",
+    "competitor_check": "مقایسه با رقبا",
 }
 
 SUMMARY_SCHEMA = {
@@ -154,6 +156,28 @@ def _sentences(report, headline, rankings) -> list[str]:
                  "مشخص پیشنهاد شده")
         piece += " با متن آماده" if plan.get("written_by") == "ai" else " به‌صورت دستورالعمل"
         out.append(piece + ".")
+
+    rivals = report.get("competitors") or {}
+    if rivals.get("compared_against"):
+        behind = rivals.get("behind_on") or []
+        ahead = rivals.get("ahead_on") or []
+        piece = f"در برابر {rivals['compared_against']} رقیب، "
+        if behind:
+            piece += f"روی {len(behind)} سنجه عقب‌اید"
+            piece += f" و روی {len(ahead)} سنجه جلوتر" if ahead else ""
+        elif ahead:
+            piece += f"روی {len(ahead)} سنجه جلوترید"
+        else:
+            piece += "روی هیچ سنجه‌ای اختلاف معناداری نیست"
+        out.append(piece + ".")
+
+        themes = rivals.get("top_missing_themes") or []
+        if themes:
+            out.append(
+                f"{rivals.get('missing_theme_count', len(themes))} موضوع هست که رقبا "
+                "درباره‌اش نوشته‌اند و سایت شما نه، از جمله: "
+                + "، ".join(f"«{t}»" for t in themes[:5]) + "."
+            )
 
     competitors = [c.get("domain") for c in (rankings.get("top_competitors") or [])[:3]]
     if competitors:

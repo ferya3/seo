@@ -47,6 +47,14 @@ interface Report {
     average_inlinks?: number
     top_opportunities?: { url: string, inlinks: number, authority: number }[]
   }
+  competitors?: {
+    compared_against?: number
+    behind_on?: string[]
+    ahead_on?: string[]
+    missing_theme_count?: number
+    top_missing_themes?: string[]
+    result_url?: string
+  }
   rankings?: {
     target_domain?: string
     best?: { keyword: string, position: number } | null
@@ -325,6 +333,44 @@ const tiles = computed(() => {
               </tr>
             </tbody>
           </table>
+        </template>
+      </section>
+
+      <section v-if="report?.competitors?.compared_against" class="panel">
+        <h2>مقایسه با رقبا</h2>
+        <p class="lede">
+          مقایسه روی نرخ‌ها و میانه‌هاست، نه تعداد صفحه‌ها — هر خزش سقف دارد و
+          شمردن صفحه‌ها اندازه‌ی سقف را می‌سنجد نه اندازه‌ی سایت.
+        </p>
+        <div class="tiles">
+          <div class="tile">
+            <div class="value">{{ report.competitors.compared_against }}</div>
+            <div class="name">رقیب مقایسه‌شده</div>
+          </div>
+          <div class="tile">
+            <div class="value" :class="report.competitors.behind_on?.length ? 'poor' : 'good'">
+              {{ report.competitors.behind_on?.length ?? 0 }}
+            </div>
+            <div class="name">سنجه‌ای که عقب‌اید</div>
+          </div>
+          <div class="tile">
+            <div class="value" :class="report.competitors.ahead_on?.length ? 'good' : ''">
+              {{ report.competitors.ahead_on?.length ?? 0 }}
+            </div>
+            <div class="name">سنجه‌ای که جلوترید</div>
+          </div>
+        </div>
+
+        <template v-if="report.competitors.top_missing_themes?.length">
+          <h3>موضوع‌هایی که رقبا پوشش می‌دهند و شما نه</h3>
+          <p class="muted small">
+            عبارتی اینجا می‌آید که دست‌کم دو رقیب رویش نوشته باشند و در سایت شما نباشد.
+          </p>
+          <p>
+            <span v-for="term in report.competitors.top_missing_themes" :key="term" class="pill">
+              {{ term }}
+            </span>
+          </p>
         </template>
       </section>
 

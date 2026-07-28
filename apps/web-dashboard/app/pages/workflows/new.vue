@@ -9,8 +9,22 @@ const form = reactive({
   seed: '',
   max_pages: 30,
   track_keywords: 10,
+  // One per line. A textarea rather than repeated inputs: people paste these
+  // from a list they already have.
+  competitors: '',
   project_id: '',
 })
+
+/** At most four, because each one is a crawl of somebody else's site. */
+const MAX_COMPETITORS = 4
+
+function competitorList(): string[] {
+  return form.competitors
+    .split(/[\n,]/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .slice(0, MAX_COMPETITORS)
+}
 
 const projects = ref<Project[]>([])
 const error = ref<string | null>(null)
@@ -36,6 +50,8 @@ async function submit() {
       track_keywords: form.track_keywords,
     }
     if (form.seed.trim()) body.seed = form.seed.trim()
+    const rivals = competitorList()
+    if (rivals.length) body.competitors = rivals
     if (form.project_id) body.project_id = form.project_id
 
     const accepted = await api.post<{ workflow_id: string }>('/v1/workflows', body)
@@ -52,8 +68,8 @@ async function submit() {
   <div class="panel" style="max-width: 560px;">
     <h1>تحلیل تازه</h1>
     <p class="lede">
-      سایت خزیده می‌شود، کلمات کلیدی استخراج و بعد جایگاهشان بررسی می‌شود —
-      سه مرحله، پشت سر هم.
+      سایت خزیده می‌شود، کلمات کلیدی استخراج و بعد جایگاهشان بررسی می‌شود.
+      اگر رقیبی وارد کنید، هرکدام هم خزیده و با سایت شما مقایسه می‌شود.
     </p>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -79,6 +95,16 @@ async function submit() {
              why the gateway caps it at fifty. -->
         <span>چند کلمه رتبه‌سنجی شود (هرکدام یک جستجوی واقعی است)</span>
         <input v-model.number="form.track_keywords" type="number" min="1" max="50">
+      </label>
+
+      <label>
+        <!-- Each competitor is a full crawl of someone else's site, run every
+             time this analysis runs. -->
+        <span>رقبا (اختیاری، هر خط یک سایت — حداکثر {{ MAX_COMPETITORS }})</span>
+        <textarea
+          v-model="form.competitors" rows="3" class="ltr"
+          placeholder="https://rival-one.example&#10;rival-two.example"
+        />
       </label>
 
       <label v-if="projects.length">

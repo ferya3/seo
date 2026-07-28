@@ -35,6 +35,8 @@ STEP_FA = {
     "link_analysis": "تحلیل لینک داخلی",
     "content_analysis": "پوشش محتوا",
     "optimizer_plan": "پیشنهاد بازنویسی",
+    "competitor_crawl": "خزش سایت رقیب",
+    "competitor_check": "مقایسه با رقبا",
 }
 
 HEADLINE_FA = [
@@ -46,6 +48,8 @@ HEADLINE_FA = [
     ("orphan_pages", "صفحه‌ی یتیم"),
     ("keyword_coverage", "پوشش کلمات (٪)"),
     ("pages_to_rewrite", "صفحه برای بازنویسی"),
+    ("competitors_compared", "رقیب مقایسه‌شده"),
+    ("behind_on", "سنجه‌ای که عقب‌اید"),
 ]
 
 
@@ -153,6 +157,13 @@ def _sections_md(report: dict[str, Any]) -> list[str]:
                   "| کلمه کلیدی | تقاضا |", "| --- | --- |"]
         lines += [f"| {row.get('keyword', '')} | {row.get('demand', '')} |"
                   for row in content["top_gaps"]] + [""]
+
+    rivals = report.get("competitors") or {}
+    if rivals.get("top_missing_themes"):
+        lines += [f"## موضوع‌هایی که رقبا پوشش می‌دهند و شما نه "
+                  f"({rivals.get('compared_against', 0)} رقیب مقایسه شد)", "",
+                  "| موضوع |", "| --- |"]
+        lines += [f"| {term} |" for term in rivals["top_missing_themes"]] + [""]
 
     links = report.get("links") or {}
     if links.get("top_opportunities"):
@@ -279,6 +290,15 @@ def _sections_html(report: dict[str, Any]) -> list[str]:
         out.append(_table(
             "صفحه‌هایی که هنوز نوشته نشده‌اند", ["کلمه کلیدی", "تقاضا"],
             [[row.get("keyword", ""), row.get("demand", "")] for row in content["top_gaps"]],
+        ))
+
+    rivals = report.get("competitors") or {}
+    if rivals.get("top_missing_themes"):
+        out.append(_table(
+            "موضوع‌هایی که رقبا پوشش می‌دهند و شما نه", ["موضوع"],
+            [[term] for term in rivals["top_missing_themes"]],
+            note=f"{rivals.get('compared_against', 0)} رقیب مقایسه شد. عبارتی اینجا می‌آید "
+                 "که دست‌کم دو رقیب رویش نوشته باشند و در سایت شما نباشد.",
         ))
 
     links = report.get("links") or {}

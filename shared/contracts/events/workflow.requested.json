@@ -60,6 +60,18 @@
           "minimum": 1,
           "maximum": 25,
           "description": "How many pages the rewrite plan covers."
+        },
+        "competitors": {
+          "type": "array",
+          "maxItems": 4,
+          "description": "Sites to compare against. Each becomes a crawl of somebody else's site, run every time this workflow runs, which is why the ceiling is lower than the competitor service's own eight.",
+          "items": {"type": "string", "maxLength": 2048}
+        },
+        "competitor_pages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "description": "How deep to crawl each competitor. Smaller than your own crawl by default: the comparison reads rates and medians, which settle long before a whole site is fetched."
         }
       },
       "additionalProperties": false

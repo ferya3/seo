@@ -35,6 +35,12 @@ final class WorkflowController extends Controller
             'max_depth' => ['sometimes', 'integer', 'min:1', 'max:20'],
             // Each tracked keyword becomes a live search request downstream.
             'track_keywords' => ['sometimes', 'integer', 'min:1', 'max:50'],
+            // Each competitor becomes a crawl of somebody else's site, every
+            // time this workflow runs — hence a lower ceiling than the
+            // competitor service's own eight.
+            'competitors' => ['sometimes', 'array', 'max:4'],
+            'competitors.*' => ['string', 'max:2048'],
+            'competitor_pages' => ['sometimes', 'integer', 'min:1', 'max:200'],
             'lang' => ['sometimes', 'string', 'max:10'],
             'country' => ['sometimes', 'string', 'max:5'],
         ]);

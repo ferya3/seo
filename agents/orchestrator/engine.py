@@ -41,7 +41,14 @@ COMPLETIONS = {
     "links.analyzed": ("link_analysis", "analysis_id"),
     "content.analyzed": ("content_analysis", "analysis_id"),
     "optimizer.planned": ("optimizer_plan", "plan_id"),
+    "competitor.compared": ("competitor_check", "comparison_id"),
 }
+
+# A failure here does not fail the workflow. A competitor's site being down,
+# refusing robots, or timing out says nothing about your site, and losing a
+# whole audit over it would make the comparison a liability rather than a
+# feature. The step still reads `failed` in the report — the workflow does not.
+OPTIONAL_KINDS = frozenset({"competitor_crawl"})
 
 
 def start(store: WorkflowStore, workflow_id: str, goal: str, inputs: dict[str, Any],
@@ -50,7 +57,7 @@ def start(store: WorkflowStore, workflow_id: str, goal: str, inputs: dict[str, A
     steps = planner.plan(goal, inputs)
     store.create(
         workflow_id, goal, inputs,
-        [(s.position, s.kind, s.job_id) for s in steps],
+        [(s.position, s.kind, s.job_id, s.params) for s in steps],
         tenant_id=tenant_id, project_id=project_id,
     )
     store.set_status(workflow_id, "running")
@@ -95,8 +102,10 @@ def advance(store: WorkflowStore, workflow_id: str) -> None:
         if workflow is None or workflow.status in ("completed", "failed"):
             return
 
-        if any(s.status == "failed" for s in workflow.steps):
-            _finish(store, conn, workflow, "failed", _first_error(workflow))
+        fatal = [s for s in workflow.steps
+                 if s.status == "failed" and s.kind not in OPTIONAL_KINDS]
+        if fatal:
+            _finish(store, conn, workflow, "failed", _first_error(fatal))
             return
 
         if any(s.status == "dispatched" for s in workflow.steps):
@@ -138,9 +147,9 @@ def advance(store: WorkflowStore, workflow_id: str) -> None:
 
 
 def _dispatch_event(workflow: Workflow, step) -> PendingEvent:
-    if step.kind == "crawl":
+    if step.kind in ("crawl", "competitor_crawl"):
         event_type = "crawl.requested"
-        payload = {"crawl_id": step.job_id, **_crawl_params(workflow)}
+        payload = {"crawl_id": step.job_id, **_crawl_params(workflow, step)}
     elif step.kind == "keyword_research":
         event_type = "keyword.research_requested"
         payload = {"research_id": step.job_id, **_research_params(workflow)}
@@ -156,6 +165,9 @@ def _dispatch_event(workflow: Workflow, step) -> PendingEvent:
     elif step.kind == "optimizer_plan":
         event_type = "optimizer.plan_requested"
         payload = {"plan_id": step.job_id, **_optimizer_params(workflow)}
+    elif step.kind == "competitor_check":
+        event_type = "competitor.comparison_requested"
+        payload = {"comparison_id": step.job_id, **_competitor_params(workflow)}
     else:                                             # pragma: no cover - guarded by the schema
         raise ValueError(f"unknown step kind {step.kind!r}")
 
@@ -170,13 +182,59 @@ def _dispatch_event(workflow: Workflow, step) -> PendingEvent:
     )
 
 
-def _crawl_params(workflow: Workflow) -> dict[str, Any]:
+def _crawl_params(workflow: Workflow, step) -> dict[str, Any]:
+    """The step's own parameters where it has them, the workflow's otherwise.
+
+    Your crawl was planned from the workflow inputs and carries none; a
+    competitor crawl carries the only thing that distinguishes it, which is
+    the site it points at.
+    """
+    if step.params.get("start_url"):
+        params: dict[str, Any] = {"start_url": step.params["start_url"]}
+        for key in ("max_pages", "max_depth"):
+            if step.params.get(key) is not None:
+                params[key] = step.params[key]
+        return params
+
     inputs = workflow.inputs
-    params: dict[str, Any] = {"start_url": inputs["start_url"]}
+    params = {"start_url": inputs["start_url"]}
     for key in ("max_pages", "max_depth"):
         if inputs.get(key) is not None:
             params[key] = inputs[key]
     return params
+
+
+def _own_crawl(workflow: Workflow) -> dict[str, Any] | None:
+    """Your crawl, never a competitor's.
+
+    Worth its own function: every step that says "the crawl" means this one,
+    and `kind == "crawl"` is the only thing separating it from the four other
+    crawls a workflow may now contain.
+    """
+    return next((s.result for s in workflow.steps if s.kind == "crawl" and s.result), None)
+
+
+def _competitor_params(workflow: Workflow) -> dict[str, Any]:
+    """Your crawl against whichever competitor crawls came back.
+
+    A competitor that failed is simply not in the list. Comparing against the
+    two that worked is a real answer; refusing to compare because the third
+    site was down is not.
+    """
+    crawl_id = (_own_crawl(workflow) or {}).get("crawl_id")
+    if not crawl_id:
+        raise NoWorkToDo("no crawl of your own site to compare")
+
+    rivals = [
+        (s.result or {}).get("crawl_id")
+        for s in sorted(workflow.steps, key=lambda s: s.position)
+        if s.kind == "competitor_crawl" and s.status == "completed"
+    ]
+    rivals = [r for r in rivals if r]
+    if not rivals:
+        raise NoWorkToDo("no competitor crawl finished, so there is nothing to compare with")
+
+    return {"crawl_id": crawl_id, "competitor_crawl_ids": rivals}
 
 
 def _research_params(workflow: Workflow) -> dict[str, Any]:
@@ -228,7 +286,7 @@ def _links_params(workflow: Workflow) -> dict[str, Any]:
 
     The service fetches the report itself; all that travels is the id.
     """
-    crawl = next((s.result for s in workflow.steps if s.kind == "crawl" and s.result), None)
+    crawl = _own_crawl(workflow)
     crawl_id = (crawl or {}).get("crawl_id")
     if not crawl_id:
         # The crawl failed or was skipped, so there is no graph to analyse.
@@ -244,7 +302,7 @@ def _content_params(workflow: Workflow) -> dict[str, Any]:
     one missing there is no question to ask, so the step is skipped rather
     than failed.
     """
-    crawl = next((s.result for s in workflow.steps if s.kind == "crawl" and s.result), None)
+    crawl = _own_crawl(workflow)
     research = next(
         (s.result for s in workflow.steps if s.kind == "keyword_research" and s.result), None
     )
@@ -263,7 +321,7 @@ def _optimizer_params(workflow: Workflow) -> dict[str, Any]:
     research came back empty still gets a usable plan — the alternative would
     be skipping the only step that proposes anything.
     """
-    crawl = next((s.result for s in workflow.steps if s.kind == "crawl" and s.result), None)
+    crawl = _own_crawl(workflow)
     research = next(
         (s.result for s in workflow.steps if s.kind == "keyword_research" and s.result), None
     )
@@ -344,6 +402,7 @@ def _report(
     links = result_of("link_analysis")
     content = result_of("content_analysis")
     plan = result_of("optimizer_plan")
+    rivals = result_of("competitor_check")
 
     report = {
         "goal": workflow.goal,
@@ -359,6 +418,13 @@ def _report(
             "orphan_pages": links.get("orphan_count"),
             "keyword_coverage": content.get("coverage"),
             "pages_to_rewrite": plan.get("pages_with_fixes"),
+            # Only when a comparison ran. A headline that always carries
+            # "competitors compared: none" is a headline reporting the absence
+            # of a feature nobody asked for.
+            **({
+                "competitors_compared": rivals.get("compared_against"),
+                "behind_on": len(rivals.get("behind_on") or []),
+            } if rivals else {}),
         },
         "crawl": crawl,
         "keywords": research,
@@ -366,6 +432,9 @@ def _report(
         "links": links,
         "content": content,
         "optimizer": plan,
+        # Absent rather than empty when no competitors were asked for: a
+        # section of zeros reads as "you are level with nobody".
+        **({"competitors": rivals} if rivals else {}),
     }
     # The deterministic summary only — this runs while the workflow row is
     # locked, so it may not touch the network. The model-written one replaces
@@ -422,6 +491,17 @@ def _step_result(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             "top_gaps": payload.get("top_gaps", [])[:10],
             "result_url": payload.get("result_url"),
         }
+    if kind == "competitor_check":
+        return {
+            "comparison_id": payload.get("comparison_id"),
+            "crawl_id": payload.get("crawl_id"),
+            "compared_against": payload.get("compared_against"),
+            "behind_on": payload.get("behind_on", []),
+            "ahead_on": payload.get("ahead_on", []),
+            "missing_theme_count": payload.get("missing_theme_count"),
+            "top_missing_themes": payload.get("top_missing_themes", [])[:10],
+            "result_url": payload.get("result_url"),
+        }
     if kind == "link_analysis":
         return {
             "analysis_id": payload.get("analysis_id"),
@@ -453,7 +533,6 @@ def _result_url(step) -> str | None:
     return (step.result or {}).get("result_url")
 
 
-def _first_error(workflow: Workflow) -> str:
-    failed = [s for s in workflow.steps if s.status == "failed"]
+def _first_error(failed: list) -> str:
     step = min(failed, key=lambda s: s.position)
     return f"step {step.position} ({step.kind}) failed: {step.error or 'no reason given'}"
