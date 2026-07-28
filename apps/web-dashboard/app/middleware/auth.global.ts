@@ -6,10 +6,12 @@
  * controls protects nothing — it just avoids showing an empty page that is
  * about to 401.
  */
+import { HOME } from '~/utils/routes'
+
 export default defineNuxtRouteMiddleware((to) => {
   const { signedIn } = useAuth()
   const open = ['/login', '/register']
 
   if (!signedIn.value && !open.includes(to.path)) return navigateTo('/login')
-  if (signedIn.value && open.includes(to.path)) return navigateTo('/workflows')
+  if (signedIn.value && open.includes(to.path)) return navigateTo(HOME)
 })

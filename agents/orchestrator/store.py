@@ -71,6 +71,21 @@ class Workflow:
                      if s.status == "pending"), None)
 
     def summary(self) -> dict[str, Any]:
+        """What a list of audits needs, which is more than an id.
+
+        `start_url` is here because a list that names every row "site_audit"
+        and an eight-character id is unreadable the moment somebody tracks two
+        sites. The score and the direction come along for the same reason: the
+        question a list answers is "which of these needs me", and that cannot
+        be answered by opening each one.
+
+        The direction is copied from the report rather than recomputed —
+        "did this get better" has one definition, in trends.py, and a second
+        one in a template would disagree with it eventually.
+        """
+        report = self.report or {}
+        trend = report.get("trend") or {}
+
         return {
             "workflow_id": self.workflow_id,
             "goal": self.goal,
@@ -78,6 +93,12 @@ class Workflow:
             "error": self.error,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "start_url": (self.inputs or {}).get("start_url"),
+            "overall_score": (report.get("headline") or {}).get("overall_score"),
+            "trend": {
+                "better": len(trend.get("better") or []),
+                "worse": len(trend.get("worse") or []),
+            } if trend.get("changes") else None,
             "steps": [
                 {"position": s.position, "kind": s.kind, "job_id": s.job_id, "status": s.status}
                 for s in sorted(self.steps, key=lambda s: s.position)

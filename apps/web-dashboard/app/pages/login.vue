@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Account } from '~/composables/useAuth'
+import { HOME } from '~/utils/routes'
 
 const api = useApi()
 const auth = useAuth()
@@ -19,7 +20,7 @@ async function submit() {
       password: password.value,
     })
     auth.signIn(answer.token, answer.user)
-    router.push('/workflows')
+    router.push(HOME)
   } catch (failure) {
     error.value = (failure as Error).message
   } finally {

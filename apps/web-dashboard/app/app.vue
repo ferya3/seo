@@ -22,6 +22,7 @@ async function signOut() {
       <div class="shell">
         <NuxtLink to="/" class="brand">داشبورد سئو</NuxtLink>
         <nav v-if="auth.signedIn.value">
+          <NuxtLink to="/sites">سایت‌ها</NuxtLink>
           <NuxtLink to="/workflows">تحلیل‌ها</NuxtLink>
           <NuxtLink to="/schedules">زمان‌بندی</NuxtLink>
           <NuxtLink to="/notifications">اطلاع‌رسانی</NuxtLink>

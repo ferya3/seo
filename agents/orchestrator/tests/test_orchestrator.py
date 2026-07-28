@@ -1412,3 +1412,35 @@ def test_the_history_endpoint_is_scoped_to_the_caller(store, monkeypatch):
         f"/v1/workflows/{workflow_id}/history", params={"tenant_id": str(uuid.uuid4())}
     ).status_code == 404
     api.reset_store(None)
+
+
+def test_a_list_row_names_the_site_it_audited(store):
+    """A list of audits that says only "site_audit" and eight hex characters
+    is unreadable the moment somebody tracks two sites."""
+    workflow_id = finished(store, {"start_url": "https://shop.test", "seed": "کفش"})
+    row = store.get(workflow_id).summary()
+
+    assert row["start_url"] == "https://shop.test"
+    assert row["overall_score"] == 73
+
+
+def test_a_list_row_carries_the_direction_the_report_decided(store):
+    finished(store)
+    second = finished(store)
+
+    first_row = store.recent(2)[1].summary()
+    second_row = store.get(second).summary()
+
+    # Nothing to compare against on the first run, so no direction at all —
+    # the same rule the report follows, not a second copy of it.
+    assert first_row["trend"] is None
+    assert second_row["trend"] == {"better": 0, "worse": 0}
+
+
+def test_a_running_workflow_has_a_row_without_pretending_to_have_a_score(store):
+    workflow_id = started(store)
+    row = store.get(workflow_id).summary()
+
+    assert row["start_url"] == "https://example.com"
+    assert row["overall_score"] is None
+    assert row["trend"] is None
