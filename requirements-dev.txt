@@ -20,5 +20,9 @@ flask>=3.0
 
 # the tools
 pytest>=8.0
+# starlette's TestClient needs an HTTP client and no longer accepts the old
+# one: with httpx it printed a deprecation warning on every run here, and on a
+# fresh install it refuses outright. That is what the first CI run found.
+httpx2>=0.1
 PyYAML>=6.0
 ruff>=0.6
