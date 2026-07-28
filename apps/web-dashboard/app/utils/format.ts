@@ -191,6 +191,53 @@ export function changeTone(change: Change): 'good' | 'poor' | 'unknown' {
   return 'unknown'
 }
 
+/**
+ * A score series as SVG polyline points.
+ *
+ * Three decisions live here rather than in the template, because each one is a
+ * way to draw a chart that lies:
+ *
+ *   * **The scale is fixed to 0–100, not to the data.** Auto-scaling a run of
+ *     44, 45, 44 fills the box with a mountain range and makes noise look like
+ *     a collapse. A score out of a hundred is drawn against a hundred.
+ *   * **A run that never measured the metric is skipped, not plotted as zero.**
+ *     Same rule as the trend table: a line dropping to the floor because a
+ *     step was skipped is a claim about the site that nobody made.
+ *   * **Oldest on the left.** The API answers newest-first, and drawing in
+ *     that order runs time backwards. The page is right-to-left; the time axis
+ *     is not, which is why both ends are labelled with their dates.
+ *
+ * Fewer than two usable points is not a chart, and the caller gets an empty
+ * string rather than a dot floating in a box.
+ */
+export interface Point { x: number, y: number, value: number }
+
+export function plot(
+  values: (number | null | undefined)[], width = 320, height = 120, max = 100,
+): Point[] {
+  const usable = values.filter((v): v is number => typeof v === 'number')
+  if (usable.length < 2) return []
+
+  const step = width / (usable.length - 1)
+  return usable.map((value, index) => ({
+    x: Math.round(index * step),
+    y: Math.round(height - (Math.max(0, Math.min(value, max)) / max) * height),
+    value,
+  }))
+}
+
+/** The same points as a polyline attribute. */
+export function sparkline(
+  values: (number | null | undefined)[], width = 320, height = 120, max = 100,
+): string {
+  return plot(values, width, height, max).map(p => `${p.x},${p.y}`).join(' ')
+}
+
+/** How many runs in the series had no number for this metric. */
+export function unplotted(values: (number | null | undefined)[]): number {
+  return values.filter(v => typeof v !== 'number').length
+}
+
 // ----------------------------------------------------------- notifications
 
 const EVENT_FA: Record<string, string> = {

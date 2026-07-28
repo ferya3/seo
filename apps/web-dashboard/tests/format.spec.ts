@@ -10,12 +10,15 @@ import {
   describeError,
   eventsLabel,
   isTerminal,
+  plot,
   positionLabel,
   runAtLabel,
   scoreTone,
   since,
+  sparkline,
   statusLabel,
   stepLabel,
+  unplotted,
   weekdayLabel,
 } from '../app/utils/format'
 
@@ -239,5 +242,54 @@ describe('trend', () => {
   it('says a flat metric is flat rather than colouring it', () => {
     expect(changeLabel(level)).toBe('0 (بدون تغییر معنادار)')
     expect(changeTone(level)).toBe('unknown')
+  })
+})
+
+
+describe('sparkline', () => {
+  it('is not drawn at all from a single run', () => {
+    // One point is a dot floating in a box, not a trend.
+    expect(sparkline([70])).toBe('')
+    expect(sparkline([])).toBe('')
+    expect(sparkline([null, 70])).toBe('')
+  })
+
+  it('draws against a fixed hundred, not against the data', () => {
+    // Auto-scaling 44/45/44 would fill the box and make noise look like a
+    // collapse. Half marks stay at half height.
+    expect(sparkline([50, 50], 100, 60)).toBe('0,30 100,30')
+    expect(sparkline([0, 100], 100, 60)).toBe('0,60 100,0')
+  })
+
+  it('skips a run that never measured the metric instead of plotting zero', () => {
+    // A line dropping to the floor because a step was skipped is a claim
+    // about the site that nobody made.
+    expect(sparkline([50, null, 50], 100, 60)).toBe('0,30 100,30')
+    expect(unplotted([50, null, undefined, 50])).toBe(2)
+  })
+
+  it('clamps a value outside the scale rather than drawing off the canvas', () => {
+    expect(sparkline([-20, 140], 100, 60)).toBe('0,60 100,0')
+  })
+
+  it('spaces the points evenly across the width', () => {
+    expect(sparkline([0, 0, 0], 100, 60)).toBe('0,60 50,60 100,60')
+  })
+})
+
+
+describe('plot', () => {
+  it('gives the drawing code a dot per run, value included', () => {
+    // The line alone reads as flat on a fixed 0-100 axis when a site moves by
+    // ten points; the dots are what make three runs legible as three runs.
+    expect(plot([40, 60], 100, 100)).toEqual([
+      { x: 0, y: 60, value: 40 },
+      { x: 100, y: 40, value: 60 },
+    ])
+  })
+
+  it('is empty for anything that is not a series', () => {
+    expect(plot([70])).toEqual([])
+    expect(plot([])).toEqual([])
   })
 })

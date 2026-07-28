@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Change } from '~/utils/format'
-import { changeLabel, changeTone, isTerminal, positionLabel, scoreTone, statusLabel, stepLabel } from '~/utils/format'
+import { changeLabel, changeTone, isTerminal, positionLabel, plot, scoreTone, since, sparkline, statusLabel, stepLabel, unplotted } from '~/utils/format'
 
 interface Workflow {
   workflow_id: string
@@ -76,9 +76,38 @@ interface Report {
 const route = useRoute()
 const api = useApi()
 
+interface Run {
+  workflow_id: string
+  started_at: string
+  finished_at: string
+  headline: Record<string, number | null>
+}
+
 const workflow = ref<Workflow | null>(null)
 const error = ref<string | null>(null)
 const loading = ref(true)
+const runs = ref<Run[]>([])
+
+/*
+ * The API answers newest-first, which is what the table wants and the
+ * opposite of what the chart wants: drawing in that order runs time
+ * backwards. Reversed once, here, rather than in two places that can disagree.
+ */
+const series = computed(() => [...runs.value].reverse())
+const scores = computed(() => series.value.map(run => run.headline?.overall_score))
+const points = computed(() => sparkline(scores.value))
+const dots = computed(() => plot(scores.value))
+const missing = computed(() => unplotted(scores.value))
+
+async function loadHistory() {
+  try {
+    const history = await api.get<{ runs: Run[] }>(`/v1/workflows/${route.params.id}/history`)
+    runs.value = history.runs ?? []
+  } catch {
+    // The report is the page; its history is an extra. A gateway that cannot
+    // answer this should not blank out the audit someone came to read.
+  }
+}
 
 async function load() {
   try {
@@ -102,6 +131,7 @@ let settledAt: number | null = null
 
 onMounted(async () => {
   await load()
+  await loadHistory()
   timer = setInterval(async () => {
     const status = workflow.value?.status ?? 'queued'
     if (isTerminal(status)) {
@@ -250,6 +280,57 @@ const tiles = computed(() => {
               <td class="muted">{{ row.before }}</td>
               <td>{{ row.after }}</td>
               <td><span class="pill" :class="changeTone(row)">{{ changeLabel(row) }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section v-if="runs.length > 1" class="panel">
+        <h2>سابقه‌ی این سایت</h2>
+        <p class="lede">
+          امتیاز کلی در {{ runs.length }} اجرای گذشته. محور از ۰ تا ۱۰۰ ثابت است
+          — مقیاس‌کردن روی خودِ داده، نوسان چند امتیازی را شبیه سقوط نشان می‌دهد.
+        </p>
+
+        <figure v-if="points" class="chart">
+          <!-- preserveAspectRatio is left at its default: stretching the box
+               to the panel width squashes the line flat, which is the same
+               lie as auto-scaling, just on the other axis. -->
+          <svg viewBox="-4 -4 328 128" role="img"
+               aria-label="نمودار امتیاز کلی در اجراهای گذشته">
+            <line x1="0" y1="120" x2="320" y2="120" class="axis" />
+            <line x1="0" y1="0" x2="320" y2="0" class="axis" />
+            <polyline :points="points" fill="none" stroke="currentColor" stroke-width="2" />
+            <circle v-for="dot in dots" :key="dot.x" :cx="dot.x" :cy="dot.y" r="3.5"
+                    fill="currentColor" />
+          </svg>
+          <figcaption class="muted small">
+            <span>{{ series[0]?.finished_at?.slice(0, 10) }}</span>
+            <span>{{ series[series.length - 1]?.finished_at?.slice(0, 10) }}</span>
+          </figcaption>
+        </figure>
+        <p v-if="missing" class="muted small">
+          {{ missing }} اجرا امتیازی نداشت و رسم نشد.
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>کِی</th><th>امتیاز</th><th>ایرادها</th><th /></tr>
+          </thead>
+          <tbody>
+            <tr v-for="run in runs" :key="run.workflow_id">
+              <td>{{ since(run.finished_at) }}</td>
+              <td>
+                <span class="pill" :class="scoreTone(run.headline?.overall_score)">
+                  {{ run.headline?.overall_score ?? '—' }}
+                </span>
+              </td>
+              <td class="muted">{{ run.headline?.total_issues ?? '—' }}</td>
+              <td>
+                <NuxtLink v-if="run.workflow_id !== workflow?.workflow_id"
+                          :to="`/workflows/${run.workflow_id}`">آن گزارش</NuxtLink>
+                <span v-else class="muted small">همین گزارش</span>
+              </td>
             </tr>
           </tbody>
         </table>
