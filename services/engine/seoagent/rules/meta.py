@@ -20,7 +20,7 @@ if str(ROOT) not in sys.path:
 
 # One definition of "a good title length", shared with the optimizer and the
 # competitor service. Re-exported here because the rules read them by name.
-from shared.seo import DESC_MAX, DESC_MIN, TITLE_MAX, TITLE_MIN  # noqa: E402,F401
+from shared.seo import DESC_MAX, DESC_MIN, TITLE_MAX, TITLE_MIN  # noqa: E402
 
 DOCS_TITLE = "https://developers.google.com/search/docs/appearance/title-link"
 DOCS_SNIPPET = "https://developers.google.com/search/docs/appearance/snippet"

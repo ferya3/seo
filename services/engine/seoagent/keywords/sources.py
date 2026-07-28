@@ -110,7 +110,10 @@ def trending_now(country: str = "IR", timeout: float = 12.0) -> list[str]:
     """Google Trends' public RSS feed of what is spiking in a country today."""
     try:
         response = _get("https://trends.google.com/trending/rss", {"geo": country.upper()}, timeout)
-        root = ET.fromstring(response.text)
+        # Google Trends over HTTPS, at a url that is a constant in this file —
+        # not a document a crawled site handed us. If that url ever becomes
+        # configurable, this needs defusedxml first.
+        root = ET.fromstring(response.text)  # noqa: S314
         titles = [item.findtext("title", "").strip() for item in root.iter("item")]
         return [t for t in titles if t][:25]
     except (requests.RequestException, ET.ParseError):

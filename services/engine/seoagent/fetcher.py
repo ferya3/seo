@@ -206,7 +206,7 @@ class Fetcher:
         if method != "HEAD":
             try:
                 body = resp.raw.read(MAX_BODY_BYTES, decode_content=True) or b""
-            except Exception as exc:  # noqa: BLE001 - broken bodies are just data to us
+            except Exception as exc:
                 resp.close()
                 return self._error(url, started, f"read error: {exc}")
             size = len(body)

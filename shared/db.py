@@ -116,9 +116,16 @@ class PostgresJobStore(Generic[R]):
             project_id=str(project_id) if project_id else None,
         )
 
+    # Four queries below interpolate a table and column name rather than
+    # binding them, because SQL cannot parameterise an identifier. Every one
+    # of those names comes from a `JobTable` built as a module-level constant
+    # in a service — "crawls", "crawl_id" — and none of them has ever been
+    # near a request. Every *value* is bound with %s. The noqa markers are
+    # deliberate: if a table name ever starts arriving from outside, the rule
+    # is the thing that should stop it, so it stays on everywhere else.
     @property
     def _select(self) -> str:
-        return f"SELECT {', '.join(self.table.columns)} FROM {self.table.name}"
+        return f"SELECT {', '.join(self.table.columns)} FROM {self.table.name}"  # noqa: S608
 
     # ------------------------------------------------------------------ api
 
@@ -134,7 +141,7 @@ class PostgresJobStore(Generic[R]):
         try:
             with self.pool.connection() as conn:
                 conn.execute(
-                    f"INSERT INTO {self.table.name} "
+                    f"INSERT INTO {self.table.name} "  # noqa: S608
                     f"(id, tenant_id, project_id, {self.table.subject_column}, status) "
                     f"VALUES (%s, %s, %s, %s, 'queued') ON CONFLICT (id) DO NOTHING",
                     (job_id, tenant_id, project_id, subject),
@@ -200,7 +207,7 @@ class PostgresJobStore(Generic[R]):
         with self.pool.connection() as conn:
             with conn.transaction():
                 row = conn.execute(
-                    f"UPDATE {self.table.name} SET {', '.join(sets)} WHERE id = %s "
+                    f"UPDATE {self.table.name} SET {', '.join(sets)} WHERE id = %s "  # noqa: S608
                     f"RETURNING {', '.join(self.table.columns)}",
                     (*values, job_id),
                 ).fetchone()
@@ -226,7 +233,7 @@ class PostgresJobStore(Generic[R]):
 
     def count(self) -> int:
         with self.pool.connection() as conn:
-            return conn.execute(f"SELECT count(*) FROM {self.table.name}").fetchone()[0]
+            return conn.execute(f"SELECT count(*) FROM {self.table.name}").fetchone()[0]  # noqa: S608
 
 
 def _stage(conn, event: PendingEvent, record: JobRecord) -> None:

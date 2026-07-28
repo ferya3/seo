@@ -26,7 +26,10 @@ FOLD = {
     "ك": "ک",   # Arabic kaf    -> Persian kaf
     "ۀ": "ه",   # heh with yeh  -> heh
     "‌": " ",        # zero-width non-joiner: a word boundary for matching
-    "‏": "",
+    # The two directional marks. They are data here — the whole point of the
+    # table is to delete them — and they are on their own lines so nothing is
+    # hidden behind them, which is what the rule protects against.
+    "‏": "",  # noqa: PLE2502
     "‎": "",
     "ـ": "",         # tatweel, purely decorative
 }

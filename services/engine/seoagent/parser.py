@@ -249,8 +249,12 @@ def parse_page(page: PageData, origin: str, follow_subdomains: bool = False) -> 
 
     page.text = extract_main_text(_strip_noise(BeautifulSoup(page.html, "lxml")))
     page.word_count = count_words(page.text)
+    # A change detector, not a signature: two crawls of the same text produce
+    # the same hash so consumers can skip work. `usedforsecurity=False` says
+    # that out loud, and lets this run on a FIPS build where sha1 is refused.
     page.content_hash = hashlib.sha1(
-        re.sub(r"\W+", " ", page.text.lower()).strip().encode("utf-8")
+        re.sub(r"\W+", " ", page.text.lower()).strip().encode("utf-8"),
+        usedforsecurity=False,
     ).hexdigest()
 
     return page

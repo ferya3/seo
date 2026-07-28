@@ -19,10 +19,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from shared.contracts import ContractError, validate_event  # noqa: E402
-from shared.events import Consumer, Envelope  # noqa: E402
+from shared.contracts import ContractError, validate_event
+from shared.events import Consumer, Envelope
 
-from . import api, engine, summary  # noqa: E402
+from . import api, engine, summary
 
 log = logging.getLogger(__name__)
 QUEUE = "orchestrator.events"

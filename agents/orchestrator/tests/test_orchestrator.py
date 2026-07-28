@@ -426,7 +426,7 @@ def test_two_orchestrators_cannot_both_dispatch_the_next_step(store):
         try:
             barrier.wait(timeout=5)
             engine.on_completion(s, "crawl.completed", payload)
-        except BaseException as exc:                     # noqa: BLE001 - reported below
+        except BaseException as exc:
             errors.append(exc)
 
     threads = [threading.Thread(target=race, args=(s,)) for s in (store, second)]

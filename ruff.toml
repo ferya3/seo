@@ -1,0 +1,74 @@
+# What this project lints for.
+#
+# Written because CI ran `ruff check` with no configuration and got 212
+# findings, nearly all of them style opinions from whichever rule set that
+# version happens to default to. A linter that reports two hundred things
+# reports nothing: the one finding worth seeing is buried.
+#
+# So the selection is deliberate — the rules that catch a *defect*, and the
+# ones that catch a habit which becomes a defect. Formatting is not in here.
+# The code is formatted by the person writing it, and a linter arguing about
+# blank lines is a linter people learn to ignore.
+#
+# One trap, learned the hard way: `--select` on the command line *replaces*
+# this list rather than narrowing it. Running `ruff check --select RUF100 --fix`
+# therefore judges every `# noqa` against a nearly empty rule set and deletes
+# the lot. Check with plain `ruff check`; the config is the whole answer.
+
+target-version = "py311"
+line-length = 100
+
+# The engine ships with its own virtualenv for the standalone install.
+extend-exclude = [".venv", "services/engine/.venv", "node_modules", "vendor"]
+
+[lint]
+select = [
+    "F",      # pyflakes: undefined names, unused imports, redefinitions
+    "E",      # pycodestyle errors, which are mostly real (E7xx comparisons)
+    "W",      # trailing whitespace and friends
+    "B",      # bugbear: mutable defaults, loop-variable binding, silent bugs
+    "DTZ",    # naive datetimes, in a system where a timezone decides the answer
+    "RUF",    # ruff's own, including unused-noqa
+    "PLE",    # pylint's errors only — not its opinions
+    "S",      # bandit: the security ones
+    "ISC",    # implicitly concatenated strings, i.e. the missing comma
+    "T20",    # print() left in a service
+]
+
+ignore = [
+    # Every service module puts the repo root on sys.path before importing
+    # from `shared`, so imports after that point are the whole design rather
+    # than an oversight. The `# noqa: E402` comments stay meaningful because
+    # the rule stays on.
+    "S101",   # assert: this is what a test suite is made of
+    "S310",   # url scheme check — the SSRF guard does this, and does it better
+    "S603",   # subprocess without shell: the deliberate, safe form
+    "B008",   # function call in a default: FastAPI's Depends() is exactly this
+
+    # RUF001-003 flag "ambiguous" unicode — a Cyrillic а pretending to be a
+    # Latin a. This product is written in Persian: every string, docstring and
+    # comment in it is "ambiguous" by that definition, and the rule reports the
+    # language rather than a problem.
+    "RUF001", "RUF002", "RUF003",
+
+    # Line length is a formatting opinion, and this file said formatting is
+    # not its business. The convention holds anyway: 99% of the lines here are
+    # under 98 characters, without a rule making them.
+    "E501",
+
+    # "Did you forget a comma?" — no. Five two-line Persian sentences inside
+    # list literals, and the rule is wrong about all five.
+    "ISC004",
+]
+
+[lint.per-file-ignores]
+# Tests reach into internals on purpose, and a crawler test needs to build
+# requests that a linter would rather it did not.
+"**/tests/**" = ["S104", "S105", "S106", "S108", "S311", "T201"]
+# The CLI and the local dashboard talk to a person through stdout.
+"services/engine/seoagent/cli.py" = ["T201"]
+"services/engine/seoagent/__main__.py" = ["T201"]
+# `python -m services.serp.providers <term>` is the documented way to check a
+# SERP provider by hand, and it answers on stdout.
+"services/serp/providers.py" = ["T201"]
+"shared/relay.py" = ["T201"]

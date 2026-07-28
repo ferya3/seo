@@ -5,6 +5,6 @@ Deliberately does *not* re-export the `research` function: that would shadow the
 research` mean two different things depending on import order.
 """
 
-from .research import KeywordReport  # noqa: F401
+from .research import KeywordReport
 
 __all__ = ["KeywordReport"]

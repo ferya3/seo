@@ -1,3 +1,3 @@
-from .app import create_app  # noqa: F401
+from .app import create_app
 
 __all__ = ["create_app"]

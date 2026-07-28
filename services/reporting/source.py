@@ -20,7 +20,7 @@ from typing import Any
 from shared.upstream import ReportUnavailable, UnknownRecord
 from shared.upstream import fetch_report as _fetch
 
-__all__ = ["ReportUnavailable", "UnknownRecord", "orchestrator_url", "fetch_workflow"]
+__all__ = ["ReportUnavailable", "UnknownRecord", "fetch_workflow", "orchestrator_url"]
 
 
 def orchestrator_url() -> str:

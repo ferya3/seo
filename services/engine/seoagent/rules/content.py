@@ -30,7 +30,7 @@ def check_headings(ctx: SiteContext) -> Iterator[Issue]:
             empty_h1.append(page.url)
 
         levels = [lvl for lvl, _ in page.headings]
-        for previous, current in zip(levels, levels[1:], strict=False):
+        for previous, current in zip(levels, levels[1:], strict=False):  # noqa: RUF007
             if current - previous > 1:
                 broken_order.append(f"{page.url} (H{previous} → H{current})")
                 break

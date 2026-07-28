@@ -37,10 +37,10 @@ from shared.llm import (  # noqa: E402
 )
 
 __all__ = [
-    "AIUnavailable",
     "MAX_TOKENS",
     "MODEL",
     "SYSTEM_PROMPT",
+    "AIUnavailable",
     "audit_suggestions",
     "is_available",
     "keyword_suggestions",

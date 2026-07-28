@@ -18,12 +18,12 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from shared.netguard import (  # noqa: E402,F401
-    ALLOWED_SCHEMES,
-    METADATA_HOSTS,
-    TargetNotAllowed,
-    allow_private,
-    check_url,
-    is_allowed,
-    reset_cache,
+from shared.netguard import (  # noqa: E402
+    ALLOWED_SCHEMES,  # noqa: F401
+    METADATA_HOSTS,  # noqa: F401
+    TargetNotAllowed,  # noqa: F401
+    allow_private,  # noqa: F401
+    check_url,  # noqa: F401
+    is_allowed,  # noqa: F401
+    reset_cache,  # noqa: F401
 )

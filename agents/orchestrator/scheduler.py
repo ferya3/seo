@@ -27,7 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from .schedules import ScheduleStore  # noqa: E402
+from .schedules import ScheduleStore
 
 log = logging.getLogger(__name__)
 

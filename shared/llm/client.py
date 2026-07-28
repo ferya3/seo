@@ -103,7 +103,7 @@ def ask(
             response = stream.get_final_message()
     except AIUnavailable:
         raise
-    except Exception as exc:  # noqa: BLE001 - every SDK/network fault is one thing to a caller
+    except Exception as exc:
         raise AIUnavailable(f"{type(exc).__name__}: {exc}") from exc
 
     return parse(response)

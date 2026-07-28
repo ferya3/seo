@@ -26,9 +26,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from shared.events import Consumer, Envelope  # noqa: E402
+from shared.events import Consumer, Envelope
 
-from . import api, channels, deliver  # noqa: E402
+from . import api, channels, deliver
 
 log = logging.getLogger(__name__)
 QUEUE = "notifications.events"

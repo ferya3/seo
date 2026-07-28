@@ -236,7 +236,7 @@ class Consumer:
         self._channel.basic_qos(prefetch_count=self.prefetch)
         return self._channel
 
-    def _on_message(self, channel, method, properties, body) -> None:  # noqa: ANN001
+    def _on_message(self, channel, method, properties, body) -> None:
         try:
             envelope = Envelope.from_bytes(body)
         except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:

@@ -10,4 +10,4 @@ from .bus import (
     broker_url,
 )
 
-__all__ = ["Envelope", "Publisher", "Consumer", "EXCHANGE", "DLX", "CONTRACT_VERSION", "broker_url"]
+__all__ = ["CONTRACT_VERSION", "DLX", "EXCHANGE", "Consumer", "Envelope", "Publisher", "broker_url"]

@@ -139,7 +139,9 @@ def check_redirects(ctx: SiteContext) -> Iterator[Issue]:
         )
 
 
-LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "::1", ".local", ".test", ".localhost")
+# Hosts a live page must not link to. The linter reads "0.0.0.0" as a bind
+# address; here it is the thing being looked for.
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "::1", ".local", ".test", ".localhost")  # noqa: S104
 
 
 def _is_local(origin: str) -> bool:

@@ -43,7 +43,7 @@ class Crawler:
     def _report(self, message: str, done: int, total: int) -> None:
         try:
             self.progress(message, done, total)
-        except Exception:  # a broken UI callback must never kill the crawl
+        except Exception:  # noqa: BLE001, RUF100, S110
             pass
 
     # --------------------------------------------------------------- sitemaps

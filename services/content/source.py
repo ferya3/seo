@@ -14,9 +14,12 @@ from shared.upstream import ReportUnavailable, UnknownRecord
 from shared.upstream import fetch_report as _fetch
 
 __all__ = [
-    "ReportUnavailable", "UnknownRecord",
-    "crawl_service_url", "keyword_service_url",
-    "fetch_crawl", "fetch_research",
+    "ReportUnavailable",
+    "UnknownRecord",
+    "crawl_service_url",
+    "fetch_crawl",
+    "fetch_research",
+    "keyword_service_url",
 ]
 
 

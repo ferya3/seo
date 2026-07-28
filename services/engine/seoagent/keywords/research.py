@@ -62,7 +62,7 @@ def research(config: KeywordConfig, progress: ProgressFn | None = None) -> Keywo
     def notify(message: str, done: int, total: int) -> None:
         try:
             report_progress(message, done, total)
-        except Exception:
+        except Exception:  # noqa: BLE001, RUF100, S110
             pass
 
     seed = config.seed.strip()
@@ -137,7 +137,7 @@ def research(config: KeywordConfig, progress: ProgressFn | None = None) -> Keywo
 
     from .expand import QUESTIONS_EN, QUESTIONS_FA
 
-    question_markers = tuple(QUESTIONS_FA + QUESTIONS_EN) + ("؟", "?")
+    question_markers = tuple(QUESTIONS_FA + QUESTIONS_EN) + ("؟", "?")  # noqa: RUF005
     report.questions = [
         k.keyword for k in report.keywords
         if any(marker in k.keyword.lower() for marker in question_markers)

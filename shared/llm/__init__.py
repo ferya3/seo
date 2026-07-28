@@ -10,10 +10,10 @@ from .client import MAX_TOKENS, MODEL, AIUnavailable, api_key, ask, is_available
 from .prompts import SEO_SYSTEM_PROMPT
 
 __all__ = [
-    "AIUnavailable",
     "MAX_TOKENS",
     "MODEL",
     "SEO_SYSTEM_PROMPT",
+    "AIUnavailable",
     "api_key",
     "ask",
     "is_available",

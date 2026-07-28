@@ -177,7 +177,7 @@ class JobStore:
                 self._persist(job)
                 job.status = "done"
                 job.message = "تمام شد"
-            except Exception as exc:  # noqa: BLE001 - report to the UI, don't crash the server
+            except Exception as exc:
                 job.status = "error"
                 job.error = f"{type(exc).__name__}: {exc}"
                 job.message = "با خطا متوقف شد"

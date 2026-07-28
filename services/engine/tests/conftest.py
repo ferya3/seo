@@ -48,7 +48,7 @@ def isolated_job_storage(tmp_path, monkeypatch):
 class _QuietHandler(http.server.SimpleHTTPRequestHandler):
     """Adds extensionless routing (/about → about.html) and keeps the log quiet."""
 
-    def log_message(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+    def log_message(self, *args, **kwargs) -> None:
         pass
 
     def translate_path(self, path: str) -> str:
