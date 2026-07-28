@@ -137,4 +137,25 @@ final class OrchestratorClient extends ServiceClient
 
         return $this->usable($response)->json();
     }
+
+    /**
+     * Every finished audit of the same site, headlines only.
+     *
+     * @return array<string, mixed>|null  null when the workflow id is unknown
+     *
+     * @throws ServiceUnavailable
+     */
+    public function history(string $workflowId, int $limit, ?string $tenantId): ?array
+    {
+        $response = $this->send(fn () => $this->request()->get(
+            "/v1/workflows/{$workflowId}/history",
+            ['limit' => $limit] + $this->scopedTo($tenantId)
+        ));
+
+        if ($response->status() === 404) {
+            return null;
+        }
+
+        return $this->usable($response)->json();
+    }
 }

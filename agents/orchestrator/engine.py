@@ -26,7 +26,7 @@ from typing import Any
 from shared.contracts import ContractError, validate_event
 from shared.store import PendingEvent
 
-from . import planner, summary
+from . import planner, summary, trends
 from .store import Workflow, WorkflowStore
 
 log = logging.getLogger(__name__)
@@ -357,8 +357,21 @@ def _finish(
         }
         for s in sorted(workflow.steps, key=lambda s: s.position)
     ]
+    # The previous run is read on the connection already holding this
+    # workflow's lock: it is a read of other rows, so it cannot deadlock, and
+    # doing it on a second pooled connection would be a second transaction
+    # reading a workflow whose own commit has not landed yet.
+    previous = None
+    if status == "completed":
+        try:
+            previous = store.previous_completed(workflow, conn=conn)
+        except Exception:
+            # A trend is a nicety. Losing the whole finish over it would trade
+            # the report for the comparison.
+            log.exception("could not read the previous run of workflow %s", workflow.workflow_id)
+
     # One list, used by both the report and the event. Built twice, they drift.
-    report = _report(workflow, status, error, steps)
+    report = _report(workflow, status, error, steps, previous)
     payload = {
         "workflow_id": workflow.workflow_id,
         "goal": workflow.goal,
@@ -385,7 +398,8 @@ def _finish(
 
 
 def _report(
-    workflow: Workflow, status: str, error: str | None, steps: list[dict[str, Any]]
+    workflow: Workflow, status: str, error: str | None, steps: list[dict[str, Any]],
+    previous: Workflow | None = None,
 ) -> dict[str, Any]:
     """What the workflow produced, gathered in one place.
 
@@ -436,11 +450,32 @@ def _report(
         # section of zeros reads as "you are level with nobody".
         **({"competitors": rivals} if rivals else {}),
     }
+    # Absent rather than empty on a first run: "nothing to compare with" and
+    # "nothing changed" are different answers.
+    trend = trends.compare(_trend_input(previous), report) if previous is not None else None
+    if trend:
+        report["trend"] = trend
+
     # The deterministic summary only — this runs while the workflow row is
     # locked, so it may not touch the network. The model-written one replaces
     # it afterwards, off the lock, from the worker. See summary.py.
     report["summary"] = summary.deterministic(report)
     return report
+
+
+def _trend_input(previous: Workflow | None) -> dict[str, Any] | None:
+    """The previous run, in the shape `trends.compare` reads.
+
+    Its id and finish time come off the row rather than out of the report,
+    because the report never held them.
+    """
+    if previous is None or not previous.report:
+        return None
+    return {
+        **previous.report,
+        "workflow_id": previous.workflow_id,
+        "finished_at": previous.updated_at,
+    }
 
 
 def _step_result(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -454,6 +489,11 @@ def _step_result(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             "grade": payload.get("grade"),
             "total_issues": stats.get("total_issues"),
             "pages_crawled": stats.get("pages_crawled"),
+            # Kept because the next run compares against them. A site whose
+            # every page gained a meta description moves these and moves
+            # neither the overall score nor the issue count — which is how a
+            # trend section ends up telling someone their work did nothing.
+            "category_scores": payload.get("category_scores", []),
             "result_url": payload.get("result_url"),
         }
     if kind == "keyword_research":

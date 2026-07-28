@@ -243,3 +243,49 @@ def test_a_report_without_competitors_has_no_competitor_section():
     html = render.document(WORKFLOW)
     assert "رقبا پوشش می‌دهند" not in html
     assert "رقیب مقایسه‌شده" not in html
+
+
+# --------------------------------------------------------------------- trend
+
+
+def with_trend() -> dict:
+    workflow = json.loads(json.dumps(WORKFLOW))
+    workflow["report"]["trend"] = {
+        "compared_with": "aaaa-bbbb",
+        "changes": [
+            {"metric": "overall_score", "label_fa": "امتیاز کلی", "before": 70,
+             "after": 87, "change": 17, "direction": "better"},
+            {"metric": "total_issues", "label_fa": "تعداد ایرادها", "before": 9,
+             "after": 18, "change": 9, "direction": "worse"},
+            {"metric": "orphan_pages", "label_fa": "صفحه‌ی یتیم", "before": 0,
+             "after": 0, "change": 0, "direction": "level"},
+        ],
+        "better": ["overall_score"], "worse": ["total_issues"],
+        "comparable_sample": True, "note": None,
+    }
+    return workflow
+
+
+def test_the_trend_says_which_way_is_better_rather_than_just_the_sign():
+    # "+9" on issues is worse. An arrow alone makes the reader work that out.
+    html = render.document(with_trend())
+    text = render.markdown(with_trend())
+
+    for out in (html, text):
+        assert "+17 (بهتر)" in out
+        assert "+9 (بدتر)" in out
+        assert "0 (بدون تغییر معنادار)" in out
+
+
+def test_the_note_about_an_incomparable_crawl_reaches_the_document():
+    workflow = with_trend()
+    workflow["report"]["trend"]["comparable_sample"] = False
+    workflow["report"]["trend"]["note"] = "این بار 10 صفحه خزیده شد و دفعه‌ی قبل 100"
+
+    assert "دفعه‌ی قبل 100" in render.document(workflow)
+    assert "دفعه‌ی قبل 100" in render.markdown(workflow)
+
+
+def test_a_first_run_has_no_trend_section():
+    html = render.document(WORKFLOW)
+    assert "نسبت به اجرای قبلی" not in html

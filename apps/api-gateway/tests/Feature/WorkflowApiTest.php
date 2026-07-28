@@ -236,4 +236,54 @@ final class WorkflowApiTest extends TestCase
             ->assertNotFound();
     }
 
+
+    public function test_history_is_scoped_to_the_caller(): void
+    {
+        [$user, $tenant] = $this->actor();
+        Http::fake(['*' => Http::response(['start_url' => 'https://site.test/', 'runs' => []], 200)]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/v1/workflows/w-1/history')->assertOk();
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), "tenant_id={$tenant->id}")
+            && str_contains($request->url(), '/history'));
+    }
+
+    public function test_history_for_an_unknown_workflow_is_404(): void
+    {
+        [$user] = $this->actor();
+        Http::fake(['*' => Http::response(['detail' => 'workflow not found'], 404)]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/workflows/nope/history')
+            ->assertNotFound()
+            ->assertJson(['error' => 'workflow not found']);
+    }
+
+    public function test_competitors_reach_the_orchestrator_inside_inputs(): void
+    {
+        [$user] = $this->actor();
+        Http::fake(['*/v1/workflows' => Http::response(
+            ['workflow_id' => 'w-9', 'status' => 'queued', 'result_url' => '/v1/workflows/w-9'], 202
+        )]);
+
+        $this->actingAs($user, 'sanctum')->postJson('/api/v1/workflows', [
+            'start_url' => 'https://site.test',
+            'competitors' => ['https://rival.test'],
+        ])->assertStatus(202);
+
+        Http::assertSent(fn ($request) => $request['inputs']['competitors'] === ['https://rival.test']);
+    }
+
+    public function test_more_than_four_competitors_never_leaves_the_gateway(): void
+    {
+        [$user] = $this->actor();
+        Http::fake();
+
+        $this->actingAs($user, 'sanctum')->postJson('/api/v1/workflows', [
+            'start_url' => 'https://site.test',
+            'competitors' => array_map(fn ($i) => "https://rival{$i}.test", range(1, 5)),
+        ])->assertStatus(422);
+
+        Http::assertNothingSent();
+    }
 }

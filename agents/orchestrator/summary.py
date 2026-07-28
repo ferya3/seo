@@ -21,6 +21,8 @@ from typing import Any
 
 from shared import llm
 
+from . import trends
+
 log = logging.getLogger(__name__)
 
 EFFORT_VALUES = ["کم", "متوسط", "زیاد"]
@@ -90,6 +92,12 @@ def deterministic(report: dict[str, Any]) -> dict[str, Any]:
 
 def _sentences(report, headline, rankings) -> list[str]:
     out: list[str] = []
+
+    # First, because it is the one sentence a reader of the fourth weekly
+    # report wants: is this getting better or worse.
+    moving = trends.headline(report.get("trend"))
+    if moving:
+        out.append(moving)
 
     if report.get("status") == "failed":
         out.append(f"این تحلیل کامل نشد: {report.get('error') or 'دلیلی ثبت نشده است'}.")

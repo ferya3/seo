@@ -83,6 +83,23 @@ final class WorkflowController extends Controller
         return response()->json($workflow);
     }
 
+    public function history(Request $request, string $workflowId): JsonResponse
+    {
+        try {
+            $history = $this->orchestrator->history(
+                $workflowId, (int) $request->query('limit', '12'), $request->user()?->tenant_id
+            );
+        } catch (ServiceUnavailable) {
+            return response()->json(['error' => 'orchestrator unavailable'], 503);
+        }
+
+        if ($history === null) {
+            return response()->json(['error' => 'workflow not found'], 404);
+        }
+
+        return response()->json($history);
+    }
+
     public function index(Request $request): JsonResponse
     {
         try {

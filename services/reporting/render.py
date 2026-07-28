@@ -158,6 +158,16 @@ def _sections_md(report: dict[str, Any]) -> list[str]:
         lines += [f"| {row.get('keyword', '')} | {row.get('demand', '')} |"
                   for row in content["top_gaps"]] + [""]
 
+    trend = report.get("trend") or {}
+    if trend.get("changes"):
+        lines += ["## نسبت به اجرای قبلی", "",
+                  "| سنجه | قبل | حالا | تغییر |", "| --- | --- | --- | --- |"]
+        lines += [f"| {row.get('label_fa', row.get('metric', ''))} | {row.get('before', '')} "
+                  f"| {row.get('after', '')} | {_arrow(row)} |"
+                  for row in trend["changes"]] + [""]
+        if trend.get("note"):
+            lines += [trend["note"], ""]
+
     rivals = report.get("competitors") or {}
     if rivals.get("top_missing_themes"):
         lines += [f"## موضوع‌هایی که رقبا پوشش می‌دهند و شما نه "
@@ -292,6 +302,16 @@ def _sections_html(report: dict[str, Any]) -> list[str]:
             [[row.get("keyword", ""), row.get("demand", "")] for row in content["top_gaps"]],
         ))
 
+    trend = report.get("trend") or {}
+    if trend.get("changes"):
+        out.append(_table(
+            "نسبت به اجرای قبلی", ["سنجه", "قبل", "حالا", "تغییر"],
+            [[row.get("label_fa", row.get("metric", "")), row.get("before", ""),
+              row.get("after", ""), _arrow(row)]
+             for row in trend["changes"]],
+            note=trend.get("note") or "",
+        ))
+
     rivals = report.get("competitors") or {}
     if rivals.get("top_missing_themes"):
         out.append(_table(
@@ -317,6 +337,19 @@ def _sections_html(report: dict[str, Any]) -> list[str]:
             [[row.get("url", ""), row.get("fixes", "")] for row in plan["pages"]],
         ))
     return out
+
+
+def _arrow(change: dict[str, Any]) -> str:
+    """The change, with which way is *better* already decided.
+
+    An arrow alone would leave the reader working out whether more issues is
+    good news, and the whole point of the trend section is that they should
+    not have to.
+    """
+    delta = change.get("change", 0)
+    sign = f"+{delta}" if delta > 0 else str(delta)
+    verdict = {"better": "بهتر", "worse": "بدتر"}.get(change.get("direction"), "بدون تغییر معنادار")
+    return f"{sign} ({verdict})"
 
 
 def _table(heading: str, columns: list[str], rows: list[list[Any]], note: str = "") -> str:

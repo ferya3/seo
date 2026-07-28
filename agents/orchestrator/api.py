@@ -170,6 +170,24 @@ def list_workflows(limit: int = 25, tenant_id: str | None = None) -> list[dict[s
     return [w.summary() for w in store().recent(limit, tenant_id=tenant_id)]
 
 
+@app.get("/v1/workflows/{workflow_id}/history")
+def workflow_history(workflow_id: str, limit: int = 12,
+                     tenant_id: str | None = None) -> dict[str, Any]:
+    """Every finished audit of the same site, newest first.
+
+    Headlines only — enough to draw a line, not enough to be a second copy of
+    every report.
+    """
+    workflow = store().get(workflow_id, tenant_id=tenant_id)
+    if workflow is None:
+        raise HTTPException(404, "workflow not found")
+
+    return {
+        "start_url": (workflow.inputs or {}).get("start_url"),
+        "runs": store().history(workflow, limit=max(1, min(limit, 100))),
+    }
+
+
 class ScheduleRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

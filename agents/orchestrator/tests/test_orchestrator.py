@@ -1310,3 +1310,112 @@ def test_www_and_a_trailing_path_still_mean_one_competitor():
         **AUDIT, "competitors": ["https://www.rival.test/pricing", "https://rival.test/"],
     })
     assert sum(1 for s in steps if s.kind == "competitor_crawl") == 1
+
+
+# ------------------------------------------------------------------- trends
+
+
+def finished(store, inputs=None) -> str:
+    """A workflow driven all the way to completed."""
+    workflow_id = started(store, inputs or dict(AUDIT))
+    drive(store, workflow_id)
+    return workflow_id
+
+
+def test_the_first_audit_of_a_site_has_no_trend(store):
+    workflow_id = finished(store)
+    assert "trend" not in store.get(workflow_id).report
+
+
+def test_the_second_audit_compares_itself_with_the_first(store):
+    first = finished(store)
+    second = finished(store)
+
+    trend = store.get(second).report["trend"]
+    assert trend["compared_with"] == first
+    assert {c["metric"] for c in trend["changes"]} >= {"overall_score", "total_issues"}
+
+
+def test_a_trend_only_looks_at_the_same_site(store):
+    finished(store, {"start_url": "https://one.test", "seed": "کفش"})
+    other = finished(store, {"start_url": "https://two.test", "seed": "کفش"})
+
+    # Two different sites audited in the same minute is the ordinary case for
+    # anyone tracking more than one, and lining their numbers up would be
+    # nonsense presented as history.
+    assert "trend" not in store.get(other).report
+
+
+def test_a_trend_never_reaches_across_tenants(store):
+    alice = str(uuid.uuid4())
+    engine.start(store, alice, "site_audit", dict(AUDIT), tenant_id=None)
+    drive(store, alice)
+
+    bob_id = str(uuid.uuid4())
+    with psycopg.connect(DSN, autocommit=True) as connection:
+        connection.execute(
+            "INSERT INTO tenants (id, name) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+            (bob_id, "bob"),
+        )
+    bob = str(uuid.uuid4())
+    engine.start(store, bob, "site_audit", dict(AUDIT), tenant_id=bob_id)
+    drive(store, bob)
+
+    # Same url, different account. Bob's first audit is Bob's first audit.
+    assert "trend" not in store.get(bob).report
+
+
+def test_a_failed_run_is_not_something_the_next_one_compares_against(store):
+    broken = started(store)
+    step = store.get(broken).step_at(1)
+    engine.on_completion(store, "crawl.completed",
+                         crawl_done(step.job_id, "failed", "connection refused"))
+    assert store.get(broken).status == "failed"
+
+    after = finished(store)
+    # Half a crawl has half the issues, and "issues halved" would be the story
+    # of a run that stopped early.
+    assert "trend" not in store.get(after).report
+
+
+def test_the_summary_leads_with_the_direction_the_site_is_moving(store):
+    finished(store)
+    second = finished(store)
+
+    text = store.get(second).report["summary"]["text_fa"]
+    assert "نسبت به اجرای قبلی" in text or "امتیاز کلی از" in text
+
+
+def test_history_lists_the_same_sites_finished_runs_newest_first(store):
+    first = finished(store)
+    second = finished(store)
+
+    runs = store.history(store.get(second))
+    assert [r["workflow_id"] for r in runs] == [second, first]
+    assert runs[0]["headline"]["overall_score"] == 73
+
+
+def test_history_carries_headlines_not_whole_reports(store):
+    workflow_id = finished(store)
+    row = store.history(store.get(workflow_id))[0]
+
+    # A history endpoint that returned reports would send megabytes to draw
+    # one line.
+    assert set(row) == {"workflow_id", "started_at", "finished_at", "headline"}
+    assert "crawl" not in row["headline"]
+
+
+def test_the_history_endpoint_is_scoped_to_the_caller(store, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from agents.orchestrator import api
+
+    api.reset_store(store)
+    client = TestClient(api.app)
+    workflow_id = finished(store)
+
+    assert client.get(f"/v1/workflows/{workflow_id}/history").status_code == 200
+    assert client.get(
+        f"/v1/workflows/{workflow_id}/history", params={"tenant_id": str(uuid.uuid4())}
+    ).status_code == 404
+    api.reset_store(None)

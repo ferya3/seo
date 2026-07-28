@@ -241,6 +241,76 @@ class WorkflowStore:
         """Read through a connection the caller already holds."""
         return _load(conn, workflow_id)
 
+    def previous_completed(self, workflow: Workflow, conn=None) -> Workflow | None:
+        """The last finished audit of the same site, for the same tenant.
+
+        Same site *and* same goal: comparing a site_audit with some future
+        goal's report would line up numbers that mean different things. Only
+        `completed`, because a run that failed halfway has partial numbers and
+        "issues halved" would be the story of a crawl that stopped early.
+
+        `IS NOT DISTINCT FROM` on the tenant so the no-tenant case — a single
+        machine with no accounts — still finds its own history instead of
+        matching everyone.
+        """
+        start_url = (workflow.inputs or {}).get("start_url")
+        if not start_url:
+            return None
+
+        sql = (
+            "SELECT id FROM workflows "
+            "WHERE id <> %s AND goal = %s AND status = 'completed' "
+            "  AND tenant_id IS NOT DISTINCT FROM %s "
+            "  AND inputs->>'start_url' = %s "
+            "  AND created_at <= (SELECT created_at FROM workflows WHERE id = %s) "
+            "ORDER BY created_at DESC LIMIT 1"
+        )
+        params = (workflow.workflow_id, workflow.goal, workflow.tenant_id,
+                  start_url, workflow.workflow_id)
+
+        if conn is not None:
+            row = conn.execute(sql, params).fetchone()
+            return _load(conn, str(row[0])) if row else None
+
+        with self.pool.connection() as own:
+            row = own.execute(sql, params).fetchone()
+            return _load(own, str(row[0])) if row else None
+
+    def history(self, workflow: Workflow, limit: int = 12, conn=None) -> list[dict[str, Any]]:
+        """The same site's finished audits, newest first.
+
+        Headlines only. A history endpoint that returned whole reports would
+        send megabytes to draw one line on a chart.
+        """
+        start_url = (workflow.inputs or {}).get("start_url")
+        if not start_url:
+            return []
+
+        sql = (
+            "SELECT id, created_at, updated_at, report->'headline' FROM workflows "
+            "WHERE goal = %s AND status = 'completed' "
+            "  AND tenant_id IS NOT DISTINCT FROM %s "
+            "  AND inputs->>'start_url' = %s "
+            "ORDER BY created_at DESC LIMIT %s"
+        )
+        params = (workflow.goal, workflow.tenant_id, start_url, limit)
+
+        def rows(connection):
+            return [
+                {
+                    "workflow_id": str(r[0]),
+                    "started_at": _iso(r[1]),
+                    "finished_at": _iso(r[2]),
+                    "headline": r[3] or {},
+                }
+                for r in connection.execute(sql, params).fetchall()
+            ]
+
+        if conn is not None:
+            return rows(conn)
+        with self.pool.connection() as own:
+            return rows(own)
+
     def save_summary(self, workflow_id: str, summary: dict[str, Any]) -> bool:
         """Replace the summary section of a finished workflow's report.
 

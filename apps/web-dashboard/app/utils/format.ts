@@ -159,6 +159,38 @@ export function runAtLabel(iso: string | null | undefined, tz = 'Asia/Tehran'): 
   }
 }
 
+// ------------------------------------------------------------------ trends
+
+export interface Change {
+  metric: string
+  label_fa?: string
+  before: number
+  after: number
+  change: number
+  direction: 'better' | 'worse' | 'level'
+}
+
+/**
+ * The change, with which way is better already decided.
+ *
+ * "+9" on issues is worse and "+9" on the score is better. An arrow or a
+ * colour on its own leaves the reader to remember which metrics are which,
+ * and the entire point of a trend section is that they should not have to.
+ */
+export function changeLabel(change: Change): string {
+  const sign = change.change > 0 ? `+${change.change}` : String(change.change)
+  const verdict = change.direction === 'better'
+    ? 'بهتر'
+    : change.direction === 'worse' ? 'بدتر' : 'بدون تغییر معنادار'
+  return `${sign} (${verdict})`
+}
+
+export function changeTone(change: Change): 'good' | 'poor' | 'unknown' {
+  if (change.direction === 'better') return 'good'
+  if (change.direction === 'worse') return 'poor'
+  return 'unknown'
+}
+
 // ----------------------------------------------------------- notifications
 
 const EVENT_FA: Record<string, string> = {

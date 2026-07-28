@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { isTerminal, positionLabel, scoreTone, statusLabel, stepLabel } from '~/utils/format'
+import type { Change } from '~/utils/format'
+import { changeLabel, changeTone, isTerminal, positionLabel, scoreTone, statusLabel, stepLabel } from '~/utils/format'
 
 interface Workflow {
   workflow_id: string
@@ -46,6 +47,15 @@ interface Report {
     max_depth?: number
     average_inlinks?: number
     top_opportunities?: { url: string, inlinks: number, authority: number }[]
+  }
+  trend?: {
+    compared_with?: string
+    compared_at?: string
+    changes?: Change[]
+    better?: string[]
+    worse?: string[]
+    comparable_sample?: boolean
+    note?: string | null
   }
   competitors?: {
     compared_against?: number
@@ -223,6 +233,26 @@ const tiles = computed(() => {
         </template>
 
         <p v-if="summary.note" class="muted" style="margin-bottom: 0;">{{ summary.note }}</p>
+      </section>
+
+      <!-- Right under the summary: by the second run this is the first thing
+           anyone looks for. -->
+      <section v-if="report?.trend?.changes?.length" class="panel">
+        <h2>نسبت به اجرای قبلی</h2>
+        <p v-if="report.trend.note" class="lede">{{ report.trend.note }}</p>
+        <table>
+          <thead>
+            <tr><th>سنجه</th><th>قبل</th><th>حالا</th><th>تغییر</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in report.trend.changes" :key="row.metric">
+              <td>{{ row.label_fa ?? row.metric }}</td>
+              <td class="muted">{{ row.before }}</td>
+              <td>{{ row.after }}</td>
+              <td><span class="pill" :class="changeTone(row)">{{ changeLabel(row) }}</span></td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section v-if="report?.headline" class="panel">

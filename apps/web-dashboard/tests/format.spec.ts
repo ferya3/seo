@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   cadenceLabel,
+  changeLabel,
+  changeTone,
   deliveryDetail,
   deliveryLabel,
   deliveryTone,
@@ -213,5 +215,29 @@ describe('deliveries', () => {
     expect(deliveryDetail({ status: 'failed', http_status: null, error: null }))
       .toBe('دلیلش ثبت نشده')
     expect(deliveryDetail({ status: 'sent', http_status: 200 })).toBe('HTTP 200')
+  })
+})
+
+
+describe('trend', () => {
+  const better = { metric: 'overall_score', before: 45, after: 58, change: 13, direction: 'better' as const }
+  const worse = { metric: 'total_issues', before: 9, after: 18, change: 9, direction: 'worse' as const }
+  const level = { metric: 'orphan_pages', before: 2, after: 2, change: 0, direction: 'level' as const }
+
+  it('decides which way is better instead of leaving it to the reader', () => {
+    // Both moved up by a positive number; only one of them is good news.
+    expect(changeLabel(better)).toBe('+13 (بهتر)')
+    expect(changeLabel(worse)).toBe('+9 (بدتر)')
+    expect(changeTone(better)).toBe('good')
+    expect(changeTone(worse)).toBe('poor')
+  })
+
+  it('keeps a negative sign readable', () => {
+    expect(changeLabel({ ...worse, change: -4, direction: 'better' })).toBe('-4 (بهتر)')
+  })
+
+  it('says a flat metric is flat rather than colouring it', () => {
+    expect(changeLabel(level)).toBe('0 (بدون تغییر معنادار)')
+    expect(changeTone(level)).toBe('unknown')
   })
 })

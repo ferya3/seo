@@ -86,4 +86,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->prefix('v1')->group(functio
     Route::post('/workflows', [WorkflowController::class, 'store'])->middleware('throttle:crawls');
     Route::get('/workflows', [WorkflowController::class, 'index']);
     Route::get('/workflows/{workflow}', [WorkflowController::class, 'show']);
+    // The same site's earlier runs, headlines only — what makes a schedule
+    // a series rather than a pile of snapshots.
+    Route::get('/workflows/{workflow}/history', [WorkflowController::class, 'history']);
 });
