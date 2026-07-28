@@ -284,6 +284,46 @@ services:
       postgres: {condition: service_healthy}
     restart: on-failure
 
+  competitor-api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/competitor.Dockerfile
+    command: ["uvicorn", "services.competitor.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      COMPETITOR_DATA_DIR: /var/lib/seoagent/competitor
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+      # One upstream, used several times over: your crawl and each of theirs.
+      CRAWL_SERVICE_URL: http://crawl-api:8000
+    ports: ["127.0.0.1:8010:8000"]
+    volumes:
+      - competitor-data:/var/lib/seoagent/competitor
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  competitor-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/competitor.Dockerfile
+    command: ["python", "-m", "services.competitor.worker"]
+    environment:
+      RABBITMQ_URL: amqp://seo:seo@rabbitmq:5672/%2F
+      COMPETITOR_DATA_DIR: /var/lib/seoagent/competitor
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+      CRAWL_SERVICE_URL: http://crawl-api:8000
+    volumes:
+      - competitor-data:/var/lib/seoagent/competitor
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    restart: on-failure
+
   optimizer-api:
     build:
       context: ../..
@@ -460,6 +500,7 @@ services:
       KEYWORD_SERVICE_URL: http://keyword-api:8000
       ORCHESTRATOR_URL: http://orchestrator-api:8000
       SERP_SERVICE_URL: http://serp-api:8000
+      COMPETITOR_SERVICE_URL: http://competitor-api:8000
     ports: ["127.0.0.1:8000:8000"]
     depends_on:
       postgres: {condition: service_healthy}
@@ -508,5 +549,6 @@ volumes:
   serp-data:
   links-data:
   content-data:
+  competitor-data:
   optimizer-data:
   reports-data:

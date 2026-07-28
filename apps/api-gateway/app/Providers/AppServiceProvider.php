@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\CompetitorServiceClient;
 use App\Services\CrawlServiceClient;
 use App\Services\KeywordServiceClient;
 use App\Services\OrchestratorClient;
@@ -26,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(SerpServiceClient::class, fn () => SerpServiceClient::fromConfig());
         $this->app->singleton(ReportingServiceClient::class, fn () => ReportingServiceClient::fromConfig());
         $this->app->singleton(NotificationServiceClient::class, fn () => NotificationServiceClient::fromConfig());
+        $this->app->singleton(CompetitorServiceClient::class, fn () => CompetitorServiceClient::fromConfig());
     }
 
     /**

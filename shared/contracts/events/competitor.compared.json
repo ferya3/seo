@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/competitor.compared.json",
+  "title": "competitor.compared",
+  "description": "A competitor comparison finished. Carries where the site stands and the subjects it does not cover; the profiles and the full theme list stay behind the result url.",
+  "type": "object",
+  "required": ["comparison_id", "crawl_id", "status", "result_url"],
+  "additionalProperties": false,
+  "properties": {
+    "comparison_id": {"type": "string", "format": "uuid"},
+    "crawl_id": {"type": "string"},
+    "competitor_crawl_ids": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {"type": "string"}
+    },
+    "status": {"enum": ["completed", "failed"]},
+    "error": {"type": ["string", "null"]},
+    "compared_against": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many competitors had a large enough sample to be judged against. Lower than the number asked for whenever a crawl was too small or could not be fetched."
+    },
+    "behind_on": {
+      "type": "array",
+      "maxItems": 10,
+      "description": "Metric names where the site sits below the competitors' median by more than the margin.",
+      "items": {"type": "string"}
+    },
+    "ahead_on": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {"type": "string"}
+    },
+    "missing_theme_count": {"type": "integer", "minimum": 0},
+    "top_missing_themes": {
+      "type": "array",
+      "maxItems": 10,
+      "description": "Terms at least two competitors write about and this site does not.",
+      "items": {"type": "string"}
+    },
+    "result_url": {"type": "string"}
+  }
+}

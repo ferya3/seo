@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CompetitorController;
 use App\Http\Controllers\Api\CrawlController;
 use App\Http\Controllers\Api\KeywordController;
 use App\Http\Controllers\Api\NotificationController;
@@ -66,6 +67,13 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->prefix('v1')->group(functio
     Route::delete('/notification-channels/{channel}', [NotificationController::class, 'destroy']);
     Route::post('/notification-channels/{channel}/test', [NotificationController::class, 'test']);
     Route::get('/notification-deliveries', [NotificationController::class, 'deliveries']);
+
+    // Comparing crawls that already exist reads them and does arithmetic; the
+    // expensive part was the crawls, and those were throttled where they were
+    // started.
+    Route::post('/comparisons', [CompetitorController::class, 'store']);
+    Route::get('/comparisons', [CompetitorController::class, 'index']);
+    Route::get('/comparisons/{comparison}', [CompetitorController::class, 'show']);
 
     // Rendering a document is cheap and read-only: the general budget.
     Route::post('/reports', [ReportController::class, 'store']);

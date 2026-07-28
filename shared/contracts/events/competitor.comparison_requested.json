@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seo.platform/contracts/events/competitor.comparison_requested.json",
+  "title": "competitor.comparison_requested",
+  "description": "Compare a finished crawl of your site against finished crawls of competitors. Published by the gateway or the orchestrator; consumed by the competitor service, which fetches every report itself rather than receiving them here. Crawl ids, not domains: a competitor has to be crawled before it can be compared, and this service does not start crawls.",
+  "type": "object",
+  "required": ["crawl_id", "competitor_crawl_ids"],
+  "additionalProperties": false,
+  "properties": {
+    "comparison_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Allocated by the caller so the result url is known before the work starts."
+    },
+    "crawl_id": {"type": "string", "format": "uuid"},
+    "competitor_crawl_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "description": "Bounded because every entry is a crawl report fetched over the network and held in memory while the comparison runs.",
+      "items": {"type": "string", "format": "uuid"}
+    }
+  }
+}

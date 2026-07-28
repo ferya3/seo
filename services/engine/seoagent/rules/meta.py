@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+import sys
 from collections import defaultdict
 from collections.abc import Iterator
+from pathlib import Path
 
 from ..fetcher import normalize_url, same_site
 from ..models import Category, Issue, Severity, SiteContext
 from .base import make_issue, rule, sample
 
-TITLE_MIN = 25
-TITLE_MAX = 60
-DESC_MIN = 70
-DESC_MAX = 160
+# The engine runs standalone from its own venv as well as inside the platform,
+# so the repo root is put on the path the same way `ai.py` and `netguard.py`
+# do it.
+ROOT = Path(__file__).resolve().parents[4]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+# One definition of "a good title length", shared with the optimizer and the
+# competitor service. Re-exported here because the rules read them by name.
+from shared.seo import DESC_MAX, DESC_MIN, TITLE_MAX, TITLE_MIN  # noqa: E402,F401
 
 DOCS_TITLE = "https://developers.google.com/search/docs/appearance/title-link"
 DOCS_SNIPPET = "https://developers.google.com/search/docs/appearance/snippet"

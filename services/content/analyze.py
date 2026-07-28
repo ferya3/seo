@@ -24,55 +24,20 @@ Pure functions of two dictionaries: no network, no database, no clock.
 
 from __future__ import annotations
 
-import re
-import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-# Persian text arrives spelled several ways for the same word. Arabic yeh and
-# kaf are the common ones — a page titled "کفش ورزشي" (Arabic yeh) would never
-# match the keyword "کفش ورزشی" (Persian yeh) without this, and the gap report
-# would invent work that is already done.
-FOLD = {
-    "ي": "ی",   # Arabic yeh    -> Persian yeh
-    "ى": "ی",   # alef maksura  -> Persian yeh
-    "ك": "ک",   # Arabic kaf    -> Persian kaf
-    "ۀ": "ه",   # heh with yeh  -> heh
-    "‌": " ",        # zero-width non-joiner: a word boundary for matching
-    "‏": "",
-    "‎": "",
-    "ـ": "",         # tatweel, purely decorative
-}
-DIACRITICS = re.compile(r"[ً-ْٰ]")
-NON_WORD = re.compile(r"[^\w؀-ۿ]+", re.UNICODE)
-
-# Words too common to carry intent. Kept short on purpose: an aggressive stop
-# list starts eating real query terms.
-STOPWORDS = {
-    "و", "در", "به", "از", "با", "برای", "را", "که", "این", "آن", "است", "های", "ها",
-    "the", "a", "an", "of", "for", "and", "in", "on", "to",
-}
+# The Persian spelling rules moved to `shared.text` when the competitor service
+# needed the same ones. They are re-exported here because they were part of
+# this module's surface first, and because "which yeh" has to have exactly one
+# answer across the whole system.
+from shared.text import FOLD, NON_WORD, STOPWORDS, normalise, words  # noqa: F401
 
 # How much of a keyword's words must appear in what a page declares before the
 # page counts as targeting it. Two-thirds means "کفش ورزشی مردانه" matches a
 # page about "کفش ورزشی مردانه ساق بلند" but not one that merely says "کفش".
 MATCH_RATIO = 0.67
-
-
-def normalise(text: str | None) -> str:
-    """One spelling per word, so matching means what it looks like it means."""
-    if not text:
-        return ""
-    text = unicodedata.normalize("NFKC", str(text))
-    for source, target in FOLD.items():
-        text = text.replace(source, target)
-    text = DIACRITICS.sub("", text)
-    return NON_WORD.sub(" ", text).strip().casefold()
-
-
-def words(text: str | None) -> list[str]:
-    return [w for w in normalise(text).split() if w and w not in STOPWORDS]
 
 
 @dataclass

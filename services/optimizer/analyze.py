@@ -25,13 +25,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
-from services.content.analyze import normalise, words
-
-# Google truncates a title link around sixty characters and a snippet around a
-# hundred and sixty. Under the lower bound is not an error — it is a signal
-# that the page is leaving room it could be using.
-TITLE_MIN, TITLE_MAX = 25, 60
-DESC_MIN, DESC_MAX = 70, 160
+from shared.seo import DESC_MAX, DESC_MIN, TITLE_MAX, TITLE_MIN
+from shared.text import normalise, words
 
 # Separators sites use between a page title and their brand.
 BRAND_SEPARATORS = ("|", "-", "–", "—", "»", "·", ":")

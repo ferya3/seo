@@ -33,6 +33,13 @@ return [
         'timeout' => (int) env('NOTIFICATIONS_SERVICE_TIMEOUT', 15),
     ],
 
+    'competitor' => [
+        // Every competitor is a crawl report fetched and held in memory, so
+        // accepting the request takes longer than handing off a single job.
+        'url' => env('COMPETITOR_SERVICE_URL', 'http://competitor-api:8000'),
+        'timeout' => (int) env('COMPETITOR_SERVICE_TIMEOUT', 30),
+    ],
+
     'crawl' => [
         'url' => env('CRAWL_SERVICE_URL', 'http://crawl-api:8000'),
         'timeout' => (int) env('CRAWL_SERVICE_TIMEOUT', 10),
