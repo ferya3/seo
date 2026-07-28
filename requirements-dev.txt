@@ -1,0 +1,24 @@
+# Everything the test suite needs, in one file.
+#
+# The services install their own requirements.txt into their own images; this
+# is the union plus the tools, and it exists because CI needs one command and
+# because "which of eleven files does the suite need" is not a question anyone
+# should have to answer twice.
+
+# the services
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pika>=1.3
+jsonschema>=4.21
+requests>=2.32
+psycopg[binary,pool]>=3.2
+
+# the engine
+beautifulsoup4>=4.12
+lxml>=5.0
+flask>=3.0
+
+# the tools
+pytest>=8.0
+PyYAML>=6.0
+ruff>=0.6
