@@ -58,6 +58,73 @@ final class OrchestratorClient extends ServiceClient
     }
 
     /**
+     * @param  array<string, mixed>  $body
+     * @return array<string, mixed>
+     *
+     * @throws RequestRejected|ServiceUnavailable
+     */
+    public function schedule(array $body): array
+    {
+        $response = $this->send(fn () => $this->request()->post('/v1/schedules', $body));
+
+        if ($response->status() === 400 || $response->status() === 422) {
+            throw new RequestRejected($this->reason($response));
+        }
+
+        return $this->usable($response)->json();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws ServiceUnavailable
+     */
+    public function schedules(?string $tenantId): array
+    {
+        $response = $this->send(
+            fn () => $this->request()->get('/v1/schedules', $this->scopedTo($tenantId))
+        );
+
+        return $this->usable($response)->json();
+    }
+
+    /**
+     * @return array<string, mixed>|null  null when the schedule id is unknown
+     *
+     * @throws ServiceUnavailable
+     */
+    public function pauseSchedule(string $scheduleId, bool $active, ?string $tenantId): ?array
+    {
+        $response = $this->send(fn () => $this->request()->post(
+            "/v1/schedules/{$scheduleId}/pause?".http_build_query(
+                ['active' => $active ? 'true' : 'false'] + $this->scopedTo($tenantId)
+            )
+        ));
+
+        if ($response->status() === 404) {
+            return null;
+        }
+
+        return $this->usable($response)->json();
+    }
+
+    /** @throws ServiceUnavailable */
+    public function deleteSchedule(string $scheduleId, ?string $tenantId): bool
+    {
+        $response = $this->send(fn () => $this->request()->delete(
+            "/v1/schedules/{$scheduleId}", $this->scopedTo($tenantId)
+        ));
+
+        if ($response->status() === 404) {
+            return false;
+        }
+
+        $this->usable($response);
+
+        return true;
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      *
      * @throws ServiceUnavailable

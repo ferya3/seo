@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\CrawlController;
 use App\Http\Controllers\Api\KeywordController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProjectController;
+use App\Http\Controllers\Api\ScheduleController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SerpController;
 use App\Http\Controllers\Api\WorkflowController;
@@ -51,6 +52,13 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->prefix('v1')->group(functio
     Route::post('/checks', [SerpController::class, 'store'])->middleware('throttle:crawls');
     Route::get('/checks', [SerpController::class, 'index']);
     Route::get('/checks/{check}', [SerpController::class, 'show']);
+
+    // A schedule is configuration; the runs it starts are throttled where
+    // they happen, in the workflow route.
+    Route::post('/schedules', [ScheduleController::class, 'store']);
+    Route::get('/schedules', [ScheduleController::class, 'index']);
+    Route::post('/schedules/{schedule}/pause', [ScheduleController::class, 'pause']);
+    Route::delete('/schedules/{schedule}', [ScheduleController::class, 'destroy']);
 
     // Who gets told. Configuration, so no throttle beyond the general one.
     Route::post('/notification-channels', [NotificationController::class, 'store']);

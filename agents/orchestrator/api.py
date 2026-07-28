@@ -27,14 +27,16 @@ sys.path.insert(0, str(ROOT))
 
 from shared.db import UnknownTenant  # noqa: E402
 
-from . import engine, planner  # noqa: E402
+from . import engine, planner, schedules  # noqa: E402
 from .planner import UnknownGoal  # noqa: E402
+from .schedules import InvalidSchedule, ScheduleStore  # noqa: E402
 from .store import WorkflowStore  # noqa: E402
 
 log = logging.getLogger(__name__)
 SERVICE = "orchestrator"
 
 _store: WorkflowStore | None = None
+_schedules: ScheduleStore | None = None
 
 
 def store() -> WorkflowStore:
@@ -47,10 +49,21 @@ def store() -> WorkflowStore:
     return _store
 
 
-def reset_store(new: WorkflowStore | None = None) -> None:
-    """Test seam, and the reason the store is not built at import time."""
-    global _store
+def schedule_store() -> ScheduleStore:
+    global _schedules
+    if _schedules is None:
+        dsn = os.environ.get("DATABASE_URL")
+        if not dsn:
+            raise RuntimeError("orchestrator requires DATABASE_URL; it has no file-backed mode")
+        _schedules = ScheduleStore(dsn)
+    return _schedules
+
+
+def reset_store(new: WorkflowStore | None = None, schedules_store: ScheduleStore | None = None) -> None:
+    """Test seam, and the reason the stores are not built at import time."""
+    global _store, _schedules
     _store = new
+    _schedules = schedules_store
 
 
 @asynccontextmanager
@@ -58,6 +71,8 @@ async def lifespan(app: FastAPI):
     yield
     if _store is not None:
         _store.close()
+    if _schedules is not None:
+        _schedules.close()
 
 
 app = FastAPI(
@@ -148,6 +163,73 @@ def get_workflow(workflow_id: str, tenant_id: str | None = None) -> dict[str, An
 @app.get("/v1/workflows")
 def list_workflows(limit: int = 25, tenant_id: str | None = None) -> list[dict[str, Any]]:
     return [w.summary() for w in store().recent(limit, tenant_id=tenant_id)]
+
+
+class ScheduleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal: str = "site_audit"
+    inputs: WorkflowInputs
+    cadence: str = Field(pattern="^(daily|weekly|monthly)$")
+    hour: int = Field(default=9, ge=0, le=23)
+    weekday: int = Field(default=0, ge=0, le=6)
+    day_of_month: int = Field(default=1, ge=1, le=31)
+    timezone: str = schedules.DEFAULT_TIMEZONE
+    tenant_id: str | None = None
+    project_id: str | None = None
+
+
+@app.post("/v1/schedules", status_code=201)
+def create_schedule(request: ScheduleRequest) -> dict[str, Any]:
+    inputs = {k: v for k, v in request.inputs.model_dump().items() if v is not None}
+
+    # Planned once here so an unplannable schedule is refused at creation
+    # rather than failing quietly at three in the morning.
+    try:
+        planner.plan(request.goal, inputs)
+    except (UnknownGoal, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    try:
+        schedule = schedule_store().create(
+            request.goal, inputs, request.cadence, request.hour, request.weekday,
+            request.day_of_month, request.timezone, request.tenant_id, request.project_id,
+        )
+    except InvalidSchedule as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except UnknownTenant as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    return schedule.to_dict()
+
+
+@app.get("/v1/schedules")
+def list_schedules(tenant_id: str | None = None) -> list[dict[str, Any]]:
+    return [s.to_dict() for s in schedule_store().owned_by(tenant_id)]
+
+
+@app.get("/v1/schedules/{schedule_id}")
+def get_schedule(schedule_id: str, tenant_id: str | None = None) -> dict[str, Any]:
+    schedule = schedule_store().get(schedule_id, tenant_id=tenant_id)
+    if schedule is None:
+        raise HTTPException(404, "schedule not found")
+    return schedule.to_dict()
+
+
+@app.post("/v1/schedules/{schedule_id}/pause")
+def pause_schedule(schedule_id: str, active: bool = False,
+                   tenant_id: str | None = None) -> dict[str, Any]:
+    """Pausing rather than deleting, because a paused schedule keeps its
+    history and the settings someone worked out."""
+    if not schedule_store().set_active(schedule_id, active, tenant_id):
+        raise HTTPException(404, "schedule not found")
+    return schedule_store().get(schedule_id, tenant_id=tenant_id).to_dict()
+
+
+@app.delete("/v1/schedules/{schedule_id}", status_code=204)
+def delete_schedule(schedule_id: str, tenant_id: str | None = None) -> None:
+    if not schedule_store().delete(schedule_id, tenant_id):
+        raise HTTPException(404, "schedule not found")
 
 
 def run_workflow(

@@ -466,6 +466,21 @@ services:
       redis: {condition: service_healthy}
     restart: on-failure
 
+  orchestrator-scheduler:
+    build:
+      context: ../..
+      dockerfile: infra/docker/orchestrator.Dockerfile
+    command: ["python", "-m", "agents.orchestrator.scheduler"]
+    environment:
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo
+      SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-60}
+    depends_on:
+      postgres: {condition: service_healthy}
+    # No RabbitMQ dependency on purpose: the scheduler stages events in the
+    # outbox and the relay carries them, so a broker that is down delays
+    # delivery instead of stopping schedules from firing.
+    restart: on-failure
+
   outbox-relay:
     # The only process that publishes what the services staged. Exactly one
     # deployment needs it, but running two is safe (FOR UPDATE SKIP LOCKED),

@@ -17,16 +17,16 @@
 | سرویس Crawl (`services/crawl`) | ✅ کار می‌کند، ۲۱ تست | API با FastAPI + ورکر باس، هر دو روی یک `run_crawl` |
 | سرویس Keyword (`services/keyword`) | ✅ کار می‌کند، ۲۳ تست | API با FastAPI + ورکر باس، هر دو روی یک `run_research` |
 | سرویس SERP (`services/serp`) | ⚠️ منطق ✅ (۴۱ تست)، **fetch تأییدنشده** | رتبه‌یابی، رقبا، اولویت‌بندی — همه تست‌شده؛ ولی provider اینجا اجرا نشد چون همه‌ی موتورهای جستجو بلاک‌اند |
-| اسکیمای دیتابیس (`infra/db`) | ✅ روی Postgres 16 واقعی اجرا شد | هر ده مهاجرت روی دیتابیس خالی از صفر اعمال شدند، بدون خطا |
+| اسکیمای دیتابیس (`infra/db`) | ✅ روی Postgres 16 واقعی اجرا شد | هر یازده مهاجرت روی دیتابیس خالی از صفر اعمال شدند، بدون خطا |
 | docker-compose | ⚠️ نوشته شده، اجرا نشده | Postgres، Redis، RabbitMQ، Qdrant، Meilisearch، MinIO + سرویس‌های ما و گیت‌وی (اینجا داکر دیمن نبود) |
-| API Gateway (`apps/api-gateway`) | ✅ کار می‌کند، ۱۲۸ تست روی Postgres واقعی | Laravel 13 روی PHP 8.4؛ Sanctum، تنانسی از توکن، rate limit، ترجمه‌ی خطای سرویس‌ها |
+| API Gateway (`apps/api-gateway`) | ✅ کار می‌کند، ۱۳۷ تست روی Postgres واقعی | Laravel 13 روی PHP 8.4؛ Sanctum، تنانسی از توکن، rate limit، ترجمه‌ی خطای سرویس‌ها |
 | Auth و Projects | ✅ کار می‌کند | ثبت‌نام/ورود/خروج + CRUD پروژه، همان جدول‌های `tenants`/`users`/`projects` که سرویس‌ها به آن‌ها FK دارند |
 | سرویس Internal Links (`services/internal_links`) | ✅ کار می‌کند، ۴۰ تست | گراف لینک داخلی: اعتبار داخلی، صفحات یتیم و نادیده‌گرفته‌شده، لینک به صفحه‌ی خراب، انکرتکست |
 | سرویس Content (`services/content`) | ✅ کار می‌کند، ۵۸ تست | پوشش کلمات کلیدی، شکاف محتوا، رقابت داخلی صفحات — تنها تحلیلی که همزمان به دو مرحله نیاز دارد |
 | سرویس Optimizer (`services/optimizer`) | ✅ کار می‌کند، ۴۹ تست | اولین سرویسی که پیشنهاد می‌دهد نه گزارش: چه صفحه‌ای، چه چیزش، و متن جایگزین |
 | سرویس Reporting (`services/reporting`) | ✅ کار می‌کند، ۵۵ تست + PDF واقعی گرفته شد | گردش‌کار → سند خودبسنده‌ی HTML و Markdown؛ خودکار وقتی گردش‌کار تمام می‌شود |
 | سرویس Notifications (`services/notifications`) | ✅ کار می‌کند، ۶۰ تست + تحویل واقعی روی هر دو ترابری | وبهوک امضاشده و ایمیل؛ یک‌بار فرستادن با ایندکس یکتا، آدرس وبهوک از SSRF guard رد می‌شود |
-| Orchestrator (`agents/orchestrator`) | ✅ کار می‌کند، ۸۴ تست روی Postgres واقعی | گردش‌کار شش‌مرحله‌ای + خلاصه‌ی اجرایی؛ حلقه‌ی کامل روی RabbitMQ و Postgres واقعی اجرا شد |
+| Orchestrator (`agents/orchestrator`) | ✅ کار می‌کند، ۱۱۹ تست روی Postgres واقعی | گردش‌کار شش‌مرحله‌ای + خلاصه‌ی اجرایی + زمان‌بندی؛ حلقه‌ی کامل روی RabbitMQ و Postgres واقعی اجرا شد |
 | لایه‌ی مدل زبانی (`shared/llm`) | ⚠️ منطق ✅ (۴۷ تست با لایه‌ی بازنویسی)، **تماس زنده تأییدنشده** | تنها دروازه‌ی پروژه به Claude؛ اینجا `ANTHROPIC_API_KEY` نبود، پس هیچ درخواستی واقعاً ارسال نشد — همه‌ی رفتارها با کلاینت بدلی تست شدند |
 | بقیه سرویس‌ها و ایجنت‌ها | ❌ شروع نشده | Competitor، GSC، Backlinks، Analytics |
 | Frontend (`apps/web-dashboard`) | ✅ کار می‌کند، ۱۴ تست + اجرای واقعی در مرورگر | Nuxt 4 روی گیت‌وی: ورود، پروژه‌ها، شروع تحلیل، گزارش. با Chromium روی کل پشته درایو شد |
@@ -50,7 +50,7 @@
 بدون دیتابیس، تست‌های Postgres skip می‌شوند و بقیه کار می‌کنند:
 
 ```bash
-pytest                       # ۴۸۹ پاس، ۱۱۲ skip
+pytest                       # ۵۰۸ پاس، ۱۲۸ skip
 ```
 
 با دیتابیس واقعی:
@@ -58,7 +58,7 @@ pytest                       # ۴۸۹ پاس، ۱۱۲ skip
 ```bash
 createdb seo
 for f in infra/db/migrations/*.sql; do psql -d seo -f "$f"; done
-TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo pytest    # ۶۰۱ تست
+TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo pytest    # ۶۳۶ تست
 ```
 
 `shared/tests` عمداً با فیک اجرا نمی‌شود: ارزش این ذخیره‌ساز اتمی بودن تراکنش
@@ -290,6 +290,25 @@ Orchestrator بدون هیچ API key کار کند، همان تصمیمی که 
 دوم باشد؛ ولی حساب‌وکتاب روی داده‌ی موجود است و هزینه‌ی شبکه ندارد، پس گذاشتنش
 در انتها باعث می‌شود مراحل گران‌تر زودتر شروع شوند.
 
+**«هر دوشنبه ساعت ۹» سه جواب غلط دارد.** ساعت ۹ در کدام منطقه‌ی زمانی —
+منطقه ذخیره می‌شود و حساب در همان انجام می‌شود، وگرنه با تغییر ساعت یک ساعت
+جابه‌جا می‌شود. ۳۱ در ماهی که ۳۰ روز دارد — به آخر ماه چسبانده می‌شود، چون
+«۳۱اُم» از زبان کسی که گزارش ماهانه تنظیم می‌کند یعنی «آخر ماه». و ماشینی که
+یک هفته خاموش بوده — به اولین اجرای آینده می‌پرد، نه هفت اجرای پشت سر هم؛ هفت
+گزارش یکسان یعنی صندوق پر و هفت بار خزیدن سایت یک نفر.
+
+**زمان‌بند ساده‌ترین پروسه‌ی سیستم است.** با باس حرف نمی‌زند و نمی‌داند
+گردش‌کار چیست: از دیتابیس می‌پرسد چه چیزی سررسیده، در outbox می‌گذارد، و
+می‌خوابد. رله بقیه‌اش را می‌برد، دقیقاً مثل هر تولیدکننده‌ی دیگر. شلیک و
+جابه‌جا کردن `next_run_at` در یک تراکنش انجام می‌شود و ردیف با
+`FOR UPDATE SKIP LOCKED` گرفته می‌شود، پس اجرای دو زمان‌بند هم‌زمان بی‌خطر
+است.
+
+**زمان‌بندی به‌جای cron نوشته شد.** یک رشته‌ی cron نه می‌تواند بگوید «۳۱ یعنی
+آخر ماه» و نه منطقه‌ی زمانی‌ای را که ساعت در آن معنی دارد حمل کند — و همین دو
+تفاوت بین زمان‌بندی‌ای است که سر قولش می‌ماند و یکی که آرام‌آرام جابه‌جا
+می‌شود.
+
 **یک‌بار فرستادن با ایندکس یکتا، نه با حافظه.** تحویل at-least-once است، پس
 همان رویداد دوبار می‌رسد. جفت `(channel_id, event_id)` قید یکتا دارد: ورکر اول
 INSERT می‌کند و دومی conflict می‌گیرد. هر راه‌حل درون‌حافظه‌ای با اولین
@@ -406,7 +425,7 @@ for f in infra/db/migrations/*.sql; do psql -d seo -f "$f"; done
 cd apps/api-gateway
 composer install
 cp .env.example .env && php artisan key:generate     # DB_URL و REDIS_HOST را تنظیم کن
-TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo php artisan test   # ۱۲۸ تست
+TEST_DATABASE_URL=postgresql://seo@127.0.0.1/seo php artisan test   # ۱۳۷ تست
 php artisan serve
 ```
 
@@ -431,6 +450,7 @@ curl -X POST localhost:8000/api/v1/research   -H "Authorization: Bearer $TOKEN" 
 python -m services.crawl.worker &
 python -m services.keyword.worker &
 python -m agents.orchestrator.worker &
+python -m agents.orchestrator.scheduler &   # اگر زمان‌بندی می‌خواهی
 python -m shared.relay &
 uvicorn agents.orchestrator.api:app --port 8200
 
@@ -500,8 +520,6 @@ NUXT_PUBLIC_API_BASE=http://127.0.0.1:8000/api node .output/server/index.mjs
    تک‌تک روی Postgres، RabbitMQ و Redis واقعی اجرا شدند، ولی نه از طریق compose)
 ۲. تأیید provider سرویس SERP و منابع تحقیق کلمات کلیدی روی شبکه‌ای که موتور
    جستجو و autocomplete را بلاک نمی‌کند
-۳. اجرای Optimizer با `ANTHROPIC_API_KEY` واقعی: مسیر «دستورالعمل» اجرا و
-   دیده شد، مسیر «متن آماده» فقط با کلاینت بدلی
-۴. زمان‌بندی: اجرای دوره‌ای یک گردش‌کار (هفتگی/ماهانه) — با اعلان‌ها، این
-   چیزی است که ابزار را از «وقتی یادت افتاد اجرا کن» به «خودش خبر می‌دهد»
-   تبدیل می‌کند
+۳. اجرای Optimizer با `ANTHROPIC_API_KEY` واقعی
+۴. صفحه‌ی زمان‌بندی‌ها و کانال‌های اعلان در داشبورد — API هر دو آماده است و
+   فعلاً فقط با curl قابل استفاده‌اند
