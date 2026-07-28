@@ -73,6 +73,142 @@ export function since(iso: string | null | undefined, now: Date = new Date()): s
   return `${Math.floor(hours / 24)} روز پیش`
 }
 
+// --------------------------------------------------------------- schedules
+
+// Persian month and day names, Gregorian calendar, Latin digits: the calendar
+// because the scheduler counts Gregorian months, the digits because every
+// other number on these pages is Latin and one page with two numeral systems
+// reads as a bug.
+const FA_GREGORIAN = 'fa-IR-u-ca-gregory-nu-latn'
+
+/**
+ * Monday is 0, matching Python's `weekday()`, which is what the store uses.
+ *
+ * The names are asked of Intl rather than typed out, so the cadence sentence
+ * spells the day exactly as the date beside it does — a hand-written
+ * "پنج‌شنبه" next to Intl's "پنجشنبه" reads as two different days to anyone
+ * scanning the row. 2024-01-01 was a Monday.
+ */
+const WEEKDAY_FA = Array.from({ length: 7 }, (_, day) =>
+  new Intl.DateTimeFormat(FA_GREGORIAN, { weekday: 'long', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(2024, 0, 1 + day))))
+
+export function weekdayLabel(weekday: number): string {
+  return WEEKDAY_FA[weekday] ?? String(weekday)
+}
+
+export interface Cadence {
+  cadence: string
+  hour: number
+  weekday: number
+  day_of_month: number
+}
+
+/**
+ * "هر دوشنبه ساعت ۰۹:۰۰" — the sentence someone checks against what they meant.
+ *
+ * Two things are said out loud rather than left to be discovered:
+ * the month is the Gregorian one (the scheduler does no Jalali arithmetic and
+ * pretending otherwise here would be a lie the UI tells), and a day past the
+ * 28th lands on the last day of the short months instead of skipping them.
+ */
+export function cadenceLabel(schedule: Cadence): string {
+  const at = `ساعت ${String(schedule.hour).padStart(2, '0')}:00`
+
+  switch (schedule.cadence) {
+    case 'daily':
+      return `هر روز ${at}`
+    case 'weekly':
+      return `هر ${weekdayLabel(schedule.weekday)} ${at}`
+    case 'monthly': {
+      const clamped = schedule.day_of_month > 28 ? '، در ماه‌های کوتاه‌تر آخرین روز ماه' : ''
+      return `روز ${schedule.day_of_month} هر ماه میلادی ${at}${clamped}`
+    }
+    default:
+      return schedule.cadence
+  }
+}
+
+/**
+ * An absolute time, printed in the schedule's own timezone.
+ *
+ * `next_run_at` arrives in UTC and the browser is wherever the person is
+ * sitting; rendering it locally would show 05:30 to someone who asked for
+ * nine in Tehran and leave them convinced the scheduler is broken. An
+ * unusable timezone falls back to UTC and says so rather than throwing —
+ * a page that renders nothing is worse than one that names its own zone.
+ */
+export function runAtLabel(iso: string | null | undefined, tz = 'Asia/Tehran'): string {
+  if (!iso) return '—'
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return '—'
+
+  const options: Intl.DateTimeFormatOptions = {
+    weekday: 'long', day: 'numeric', month: 'long',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }
+  try {
+    // Gregorian is forced: fa-IR would otherwise print a Jalali date next to
+    // a cadence that counts Gregorian months.
+    return new Intl.DateTimeFormat(FA_GREGORIAN, { ...options, timeZone: tz }).format(at)
+  } catch {
+    const utc = new Intl.DateTimeFormat(FA_GREGORIAN, { ...options, timeZone: 'UTC' })
+    return `${utc.format(at)} (UTC)`
+  }
+}
+
+// ----------------------------------------------------------- notifications
+
+const EVENT_FA: Record<string, string> = {
+  'report.rendered': 'گزارش آماده شد',
+  'workflow.completed': 'تحلیل تمام شد',
+}
+
+export function eventLabel(event: string): string {
+  return EVENT_FA[event] ?? event
+}
+
+/** An empty subscription list means every event, not none. */
+export function eventsLabel(events: string[] | null | undefined): string {
+  if (!events || !events.length) return 'همه‌ی رویدادها'
+  return events.map(eventLabel).join('، ')
+}
+
+export function deliveryTone(status: string): 'good' | 'poor' | 'unknown' {
+  if (status === 'sent') return 'good'
+  if (status === 'failed') return 'poor'
+  return 'unknown'   // sending — claimed, not yet answered
+}
+
+const DELIVERY_FA: Record<string, string> = {
+  sent: 'رسید',
+  failed: 'نرسید',
+  sending: 'در حال ارسال',
+}
+
+export function deliveryLabel(status: string): string {
+  return DELIVERY_FA[status] ?? status
+}
+
+/**
+ * What a delivery attempt actually says, HTTP status included.
+ *
+ * `failed` on its own is not actionable: 404 is a wrong url someone must fix,
+ * 503 is the far side having a bad minute and a retry already queued.
+ */
+export function deliveryDetail(row: { status: string, http_status?: number | null, error?: string | null }): string {
+  if (row.status === 'sent') return row.http_status ? `HTTP ${row.http_status}` : 'انجام شد'
+  if (row.status === 'sending') return 'هنوز جوابی نیامده'
+
+  if (row.http_status) {
+    const code = `HTTP ${row.http_status}`
+    // The sender records `error` as "HTTP 503" when that is all it knows, so
+    // printing both gives "HTTP 503 — HTTP 503".
+    return row.error && row.error !== code ? `${code} — ${row.error}` : code
+  }
+  return row.error || 'دلیلش ثبت نشده'
+}
+
 /**
  * What a failed request means, in one place.
  *

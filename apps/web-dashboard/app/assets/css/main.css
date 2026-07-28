@@ -122,11 +122,31 @@ th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
   display: inline-block; padding: 1px 10px; border-radius: 999px;
   font-size: 0.82rem; border: 1px solid var(--line); color: var(--muted);
 }
-.pill.completed { color: var(--good); border-color: var(--good); }
-.pill.failed { color: var(--poor); border-color: var(--poor); }
+.pill.completed, .pill.good { color: var(--good); border-color: var(--good); }
+.pill.failed, .pill.poor { color: var(--poor); border-color: var(--poor); }
 .pill.running, .pill.queued, .pill.dispatched { color: var(--accent); border-color: var(--accent); }
 
 .muted { color: var(--muted); }
+.small { font-size: 0.82rem; }
+
+/* Two buttons in a cell, on one line, without them touching. */
+.row-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Checkboxes are the one input that must not stretch to the full width. */
+fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; padding: 8px 12px 4px; }
+fieldset legend { color: var(--muted); font-size: 0.92rem; padding: 0 4px; }
+label.check { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+label.check input { width: auto; }
+label.check span { margin: 0; }
+
+/* The signing secret, shown once. Bordered like a warning because it is one:
+   leaving the page loses it for good. */
+.panel.secret { border-color: var(--fair); }
+.panel.secret code {
+  display: block; margin-top: 8px; padding: 10px 12px; overflow-wrap: anywhere;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 .summary { font-size: 1.02rem; }
 .actions li { margin-bottom: 10px; }
 .rowbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }

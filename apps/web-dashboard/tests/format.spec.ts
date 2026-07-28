@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  cadenceLabel,
+  deliveryDetail,
+  deliveryLabel,
+  deliveryTone,
   describeError,
+  eventsLabel,
   isTerminal,
   positionLabel,
+  runAtLabel,
   scoreTone,
   since,
   statusLabel,
   stepLabel,
+  weekdayLabel,
 } from '../app/utils/format'
 
 /*
@@ -115,5 +122,92 @@ describe('errors', () => {
   it('survives a body that is not an object', () => {
     expect(describeError(500, 'plain text')).toContain('500')
     expect(describeError(500, null)).toContain('500')
+  })
+})
+
+describe('cadence', () => {
+  it('names the day the way the store numbers it — Monday is zero', () => {
+    // Off by one here and every weekly schedule reads wrong on screen while
+    // firing correctly, which is the hardest kind of bug to be told about.
+    expect(weekdayLabel(0)).toBe('دوشنبه')
+    expect(weekdayLabel(6)).toBe('یکشنبه')
+  })
+
+  it('spells the day exactly as the date beside it does', () => {
+    // Both come from Intl for this reason: "پنج‌شنبه" in the cadence next to
+    // "پنجشنبه" in the next-run column reads as two different days.
+    const thursday = runAtLabel('2026-07-30T04:30:00+00:00', 'UTC')
+    expect(thursday.startsWith(weekdayLabel(3))).toBe(true)
+  })
+
+  it('pads the hour so 9 does not read as 90', () => {
+    expect(cadenceLabel({ cadence: 'daily', hour: 9, weekday: 0, day_of_month: 1 }))
+      .toBe('هر روز ساعت 09:00')
+  })
+
+  it('says the monthly cadence counts Gregorian months', () => {
+    // The scheduler does no Jalali arithmetic. A Persian UI that leaves that
+    // unsaid is read as "the first of every Persian month".
+    expect(cadenceLabel({ cadence: 'monthly', hour: 8, weekday: 0, day_of_month: 1 }))
+      .toContain('میلادی')
+  })
+
+  it('warns that a late day clamps instead of skipping the short months', () => {
+    const late = cadenceLabel({ cadence: 'monthly', hour: 9, weekday: 0, day_of_month: 31 })
+    expect(late).toContain('آخرین روز ماه')
+    // …and does not clutter the common case with it.
+    expect(cadenceLabel({ cadence: 'monthly', hour: 9, weekday: 0, day_of_month: 5 }))
+      .not.toContain('آخرین روز ماه')
+  })
+})
+
+describe('next run', () => {
+  const nine = '2026-07-28T05:30:00+00:00'   // 09:00 in Tehran
+
+  it("prints the time in the schedule's timezone, not the browser's", () => {
+    // The whole point: someone who asked for nine in Tehran must read nine,
+    // wherever the laptop is. This is UTC+03:30 in July.
+    expect(runAtLabel(nine, 'Asia/Tehran')).toContain('09:00')
+    expect(runAtLabel(nine, 'UTC')).toContain('05:30')
+  })
+
+  it('falls back to UTC and says so rather than throwing', () => {
+    const label = runAtLabel(nine, 'Mars/Olympus')
+    expect(label).toContain('UTC')
+    expect(label).toContain('05:30')
+  })
+
+  it('has an answer for a schedule that has no next run', () => {
+    expect(runAtLabel(null)).toBe('—')
+    expect(runAtLabel('not a date')).toBe('—')
+  })
+})
+
+describe('deliveries', () => {
+  it('reads an empty subscription as every event, which is what it means', () => {
+    expect(eventsLabel([])).toBe('همه‌ی رویدادها')
+    expect(eventsLabel(undefined)).toBe('همه‌ی رویدادها')
+    expect(eventsLabel(['report.rendered'])).toBe('گزارش آماده شد')
+  })
+
+  it('keeps "still sending" apart from "failed"', () => {
+    expect(deliveryTone('sent')).toBe('good')
+    expect(deliveryTone('failed')).toBe('poor')
+    expect(deliveryTone('sending')).toBe('unknown')
+    expect(deliveryLabel('sending')).toBe('در حال ارسال')
+  })
+
+  it('shows why a delivery failed, because 404 and 503 need different actions', () => {
+    expect(deliveryDetail({ status: 'failed', http_status: 404 })).toContain('404')
+    // What the webhook sender actually writes when the status is all it knows.
+    expect(deliveryDetail({ status: 'failed', http_status: 503, error: 'HTTP 503' }))
+      .toBe('HTTP 503')
+    expect(deliveryDetail({ status: 'failed', http_status: 500, error: 'ReadTimeout: took too long' }))
+      .toBe('HTTP 500 — ReadTimeout: took too long')
+    expect(deliveryDetail({ status: 'failed', http_status: null, error: 'connection refused' }))
+      .toContain('connection refused')
+    expect(deliveryDetail({ status: 'failed', http_status: null, error: null }))
+      .toBe('دلیلش ثبت نشده')
+    expect(deliveryDetail({ status: 'sent', http_status: 200 })).toBe('HTTP 200')
   })
 })
