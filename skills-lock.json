@@ -25,12 +25,6 @@
       "skillPath": "skills/dispatching-parallel-agents/SKILL.md",
       "computedHash": "b011107f17188e0b2898bb1856b5bac8b49537cc86e737c82126558a235bd62a"
     },
-    "do": {
-      "source": "thedotmack/claude-mem",
-      "sourceType": "github",
-      "skillPath": "plugin/skills/do/SKILL.md",
-      "computedHash": "ac80a2338872768e8d9e24bcad9d7a379019afa062167a20b525c4562405a2a3"
-    },
     "executing-plans": {
       "source": "obra/superpowers",
       "sourceType": "github",
@@ -54,12 +48,6 @@
       "sourceType": "github",
       "skillPath": "plugin/skills/learn-codebase/SKILL.md",
       "computedHash": "9142aab8302123f63d8db49430d1f59e2ff2bdcb885d6b3f054f22f7d92f5791"
-    },
-    "make-plan": {
-      "source": "thedotmack/claude-mem",
-      "sourceType": "github",
-      "skillPath": "plugin/skills/make-plan/SKILL.md",
-      "computedHash": "828c96bc3eab1c8c46db001b3a6a71fe07dfb32814081678ddfe067ba0978664"
     },
     "oh-my-issues": {
       "source": "thedotmack/claude-mem",
